@@ -11,6 +11,7 @@ const {
   logMessage,
   getRecentHistory,
   recordSale,
+  getPurchasedItemIds,
   setFanStatus,
   markVipAlerted,
   listFansWithPreview,
@@ -118,6 +119,7 @@ app.post('/telegram/webhook', async (req, res) => {
 
     const catalog = await getActiveCatalog();
     const history = await getRecentHistory(fan.id, 20);
+    const purchasedItemIds = await getPurchasedItemIds(fan.id);
 
     const { text, toolCalls } = await runAgentTurn({
       settings,
@@ -125,6 +127,7 @@ app.post('/telegram/webhook', async (req, res) => {
       history,
       fanMessage: msg.text,
       fan,
+      purchasedItemIds,
     });
 
     if (text) {
@@ -135,6 +138,12 @@ app.post('/telegram/webhook', async (req, res) => {
       if (call.name === 'send_offer') {
         const item = catalog.find((c) => c.id === call.input.catalog_item_id);
         if (!item) continue;
+        if (purchasedItemIds.includes(item.id)) {
+          // Filet de sécurité : même si le modèle se trompe, on ne renvoie jamais
+          // un lien déjà acheté par ce fan.
+          console.warn(`Tentative de renvoyer un article déjà acheté (fan ${fan.id}, item ${item.id}) — ignoré.`);
+          continue;
+        }
         const link = await getLinkForItem(item);
         if (!link) {
           const fallback = `Uy, tuve un pequeño problema técnico generando tu enlace — ${settings.creator_name} se va a encargar personalmente, dame un momento 🙏`;
@@ -155,7 +164,7 @@ app.post('/telegram/webhook', async (req, res) => {
         if (Number(call.input.agreed_price) >= Number(settings.alert_min_sale)) {
           await maybeAlertAdmin(
             settings,
-            `💰 Venta: ${item.name} — ${call.input.agreed_price}€ (fan: ${fan.telegram_username || fan.first_name || fan.telegram_user_id})`
+            `💰 Venta: ${item.name} — ${settings.currency_symbol || '$'}${call.input.agreed_price} (fan: ${fan.telegram_username || fan.first_name || fan.telegram_user_id})`
           );
         }
 
@@ -163,7 +172,7 @@ app.post('/telegram/webhook', async (req, res) => {
           await markVipAlerted(fan.id);
           await maybeAlertAdmin(
             settings,
-            `⭐ Nuevo VIP: ${fan.telegram_username || fan.first_name || fan.telegram_user_id} — total gastado: ${updatedFan.total_spent}€`
+            `⭐ Nuevo VIP: ${fan.telegram_username || fan.first_name || fan.telegram_user_id} — total gastado: ${settings.currency_symbol || '$'}${updatedFan.total_spent}`
           );
         }
       }

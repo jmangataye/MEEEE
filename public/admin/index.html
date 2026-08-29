@@ -160,6 +160,7 @@
           <div><label>Prix minimum négocié (€)</label><input id="min_custom_price" type="number" step="0.01" /></div>
           <div><label>Remise max négociation (%)</label><input id="max_negotiation_discount_pct" type="number" step="1" /></div>
           <div><label>Username du bot Telegram (sans @)</label><input id="telegram_bot_username" /></div>
+          <div><label>Symbole monétaire (ex: $, €)</label><input id="currency_symbol" /></div>
         </div>
         <div class="row">
           <div><label>Délai de réponse min (secondes)</label><input id="response_delay_min_seconds" type="number" /></div>
@@ -276,14 +277,14 @@ async function loadStats(){
 async function loadSettings(){
   const s = await api('/api/admin/settings');
   const fields = ['creator_name','persona_name','language','tone','intro_message','intro_message_b','playbook',
-    'min_custom_price','max_negotiation_discount_pct','telegram_bot_username','response_delay_min_seconds',
+    'min_custom_price','max_negotiation_discount_pct','telegram_bot_username','currency_symbol','response_delay_min_seconds',
     'response_delay_max_seconds','vip_threshold','alert_min_sale','admin_telegram_chat_id','reengagement_hours','reengagement_message'];
   fields.forEach(f => { const el = document.getElementById(f); if (el) el.value = s[f] ?? ''; });
 }
 
 async function saveSettings(){
   const fields = ['creator_name','persona_name','language','tone','intro_message','intro_message_b','playbook',
-    'telegram_bot_username','admin_telegram_chat_id','reengagement_message'];
+    'telegram_bot_username','currency_symbol','admin_telegram_chat_id','reengagement_message'];
   const numFields = ['min_custom_price','max_negotiation_discount_pct','response_delay_min_seconds',
     'response_delay_max_seconds','vip_threshold','alert_min_sale','reengagement_hours'];
   const payload = {};
@@ -293,17 +294,81 @@ async function saveSettings(){
   alert('Réglages enregistrés ✅');
 }
 
+let catalogCache = [];
+let currencySymbol = '$';
+
 async function loadCatalog(){
-  const items = await api('/api/admin/catalog');
-  document.getElementById('catalogCards').innerHTML = items.map(it => `
-    <div class="catalog-card">
-      <h3>${it.name} <span class="pill">${it.tier}</span></h3>
-      <p class="muted">${it.description||''}</p>
-      <p class="price">${Number(it.price).toFixed(2)}€ ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</p>
-      <p class="muted">${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien</a>' : '⚠️ pas de lien Dropfans'}</p>
-      <button class="btn btn-ghost" onclick="toggleActive('${it.id}', ${!it.active})">${it.active?'Désactiver':'Activer'}</button>
+  const [items, settings] = await Promise.all([api('/api/admin/catalog'), api('/api/admin/settings')]);
+  catalogCache = items;
+  currencySymbol = settings.currency_symbol || '$';
+  renderCatalog();
+}
+
+function renderCatalog(){
+  document.getElementById('catalogCards').innerHTML = catalogCache.map(it => `
+    <div class="catalog-card" id="card-${it.id}">
+      <div id="view-${it.id}">
+        <h3>${it.name} <span class="pill">${it.tier}</span> ${it.active ? '' : '<span class="pill">inactif</span>'}</h3>
+        <p class="muted">${it.description||''}</p>
+        <p class="price">${currencySymbol}${Number(it.price).toFixed(2)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</p>
+        <p class="muted">${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien</a>' : '⚠️ pas de lien Dropfans'}</p>
+        <button class="btn btn-ghost" onclick="toggleActive('${it.id}', ${!it.active})">${it.active?'Désactiver':'Activer'}</button>
+        <button class="btn btn-ghost" onclick="startEdit('${it.id}')">Modifier</button>
+        <button class="btn btn-danger" onclick="deleteItem('${it.id}')">Supprimer</button>
+      </div>
+      <div id="edit-${it.id}" style="display:none">
+        <label>Nom</label><input id="edit_name_${it.id}" value="${(it.name||'').replace(/"/g,'&quot;')}" />
+        <label>Description</label><textarea id="edit_description_${it.id}">${it.description||''}</textarea>
+        <div class="row">
+          <div><label>Tier</label>
+            <select id="edit_tier_${it.id}">
+              ${['entry','standard','premium','custom'].map(t => `<option value="${t}" ${t===it.tier?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div><label>Prix</label><input id="edit_price_${it.id}" type="number" step="0.01" value="${it.price}" /></div>
+          <div><label>Négociable</label>
+            <select id="edit_negotiable_${it.id}">
+              <option value="false" ${!it.is_negotiable?'selected':''}>non</option>
+              <option value="true" ${it.is_negotiable?'selected':''}>oui</option>
+            </select>
+          </div>
+        </div>
+        <label>Lien Dropfans / Dropp.fans</label>
+        <input id="edit_link_${it.id}" value="${it.dropfans_link||''}" />
+        <br /><br />
+        <button class="btn btn-primary" onclick="saveEdit('${it.id}')">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="cancelEdit('${it.id}')">Annuler</button>
+      </div>
     </div>
-  `).join('');
+  `).join('') || '<p class="muted">Aucun article dans le catalogue.</p>';
+}
+
+function startEdit(id){
+  document.getElementById('view-'+id).style.display = 'none';
+  document.getElementById('edit-'+id).style.display = 'block';
+}
+
+function cancelEdit(id){
+  document.getElementById('view-'+id).style.display = 'block';
+  document.getElementById('edit-'+id).style.display = 'none';
+}
+
+async function saveEdit(id){
+  await api('/api/admin/catalog/'+id, { method:'PUT', body: JSON.stringify({
+    name: document.getElementById('edit_name_'+id).value,
+    description: document.getElementById('edit_description_'+id).value,
+    tier: document.getElementById('edit_tier_'+id).value,
+    price: parseFloat(document.getElementById('edit_price_'+id).value),
+    is_negotiable: document.getElementById('edit_negotiable_'+id).value === 'true',
+    dropfans_link: document.getElementById('edit_link_'+id).value || null,
+  })});
+  loadCatalog();
+}
+
+async function deleteItem(id){
+  if (!confirm('Supprimer définitivement cet article du catalogue ?')) return;
+  await api('/api/admin/catalog/'+id, { method:'DELETE' });
+  loadCatalog();
 }
 
 async function toggleActive(id, active){
