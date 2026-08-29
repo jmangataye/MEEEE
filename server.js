@@ -55,6 +55,23 @@ const {
   isPaymentAlternativeOnly,
 } = require('./lib/safetyFilter');
 
+// ---------- Filet de sécurité global : une seule promesse rejetée sans
+// .catch() n'importe où dans le code (même dans une dépendance) fait, PAR
+// DÉFAUT, planter tout le process Node — ce qui coupe instantanément TOUTES
+// les conversations de TOUS les fans en cours, sans aucune trace claire dans
+// les logs (juste un redémarrage). Repéré le 29/08 en constatant un crash
+// réel ("UnhandledPromiseRejection") quelques dizaines de secondes après un
+// déploiement, causé par un `.then()` sans `.catch()` dans lib/supabase.js
+// (corrigé). Ces deux handlers ne remplacent pas la correction du bug root
+// cause à chaque fois qu'on en trouve un — mais ils empêchent qu'UN SEUL bug
+// oublié quelque part ne mette tout le bot à genoux d'un coup.
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ UnhandledPromiseRejection (process maintenu en vie):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ UncaughtException (process maintenu en vie):', err);
+});
+
 const app = express();
 app.use(express.json());
 app.use('/landing', express.static(path.join(__dirname, 'public/landing')));
