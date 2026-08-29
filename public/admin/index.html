@@ -58,6 +58,9 @@
   .brand-text .name{font-weight:800;font-size:1.02rem;letter-spacing:.01em}
   .brand-text .tag{font-size:.62rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
 
+  .nav-section-label{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-2);
+      margin:16px 4px 4px;padding:0 7px}
+  .nav-group:first-of-type{margin-top:0}
   .nav-group{display:flex;flex-direction:column;gap:2px;margin-top:14px}
   .nav-btn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;
       color:var(--muted);padding:10px 11px;border-radius:10px;font-size:.86rem;font-weight:500;cursor:pointer;
@@ -68,6 +71,11 @@
   .nav-btn.active svg{opacity:1}
   .nav-btn.active::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:3px;border-radius:0 4px 4px 0;background:var(--accent)}
   .nav-foot{margin-top:auto;padding:10px 8px 2px;font-size:.68rem;color:var(--muted-2);border-top:1px solid var(--border-soft)}
+  .nav-bot-status{display:flex;align-items:center;gap:6px}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted-2);flex:0 0 7px}
+  .status-dot.up{background:var(--green);box-shadow:0 0 0 3px rgba(52,211,153,.18)}
+  .status-dot.down{background:var(--red);box-shadow:0 0 0 3px rgba(248,113,113,.18)}
+  #adminIdentity{font-size:.68rem;color:var(--muted-2)}
 
   main{flex:1;padding:28px 34px 60px;max-width:1180px}
   .page-head{margin-bottom:22px;position:relative;padding-bottom:16px}
@@ -259,6 +267,113 @@
   .legend-item .ll{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   @media (max-width:680px){ .chart-card{grid-template-columns:1fr} }
 
+  /* ---------- transitions / animations ---------- */
+  .tab-content{animation:tab-in .22s ease}
+  @keyframes tab-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .stagger > *{animation:card-in .32s ease both}
+  .stagger > *:nth-child(1){animation-delay:0ms} .stagger > *:nth-child(2){animation-delay:35ms}
+  .stagger > *:nth-child(3){animation-delay:70ms} .stagger > *:nth-child(4){animation-delay:105ms}
+  .stagger > *:nth-child(5){animation-delay:140ms} .stagger > *:nth-child(6){animation-delay:175ms}
+  .stagger > *:nth-child(n+7){animation-delay:200ms}
+  @keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .msg-in{animation:msg-in .22s ease both}
+  @keyframes msg-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .flash-update{animation:flash-update 1s ease}
+  @keyframes flash-update{0%{box-shadow:0 0 0 0 rgba(52,211,153,.5),inset 0 0 0 999px rgba(52,211,153,.14)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0),inset 0 0 0 999px rgba(52,211,153,0)}}
+  .credit-bar-fill{position:relative;overflow:hidden}
+  .credit-bar-fill::after{content:"";position:absolute;inset:0;
+      background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.35) 48%,transparent 66%);
+      background-size:200% 100%;animation:sheen 2.6s ease-in-out infinite}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+  }
+
+  /* ---------- toasts ---------- */
+  #toastStack{position:fixed;right:18px;bottom:18px;z-index:400;display:flex;flex-direction:column;gap:8px;max-width:320px}
+  .toast{background:var(--surface-hover);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;
+      box-shadow:0 10px 30px rgba(0,0,0,.4);font-size:.83rem;position:relative;overflow:hidden;animation:toast-in .22s ease}
+  .toast.err{border-color:rgba(248,113,113,.4)}
+  .toast .toast-bar{position:absolute;left:0;bottom:0;height:2px;background:var(--accent);animation:toast-bar 3.4s linear forwards}
+  .toast.err .toast-bar{background:var(--red)}
+  @keyframes toast-in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+  @keyframes toast-bar{from{width:100%}to{width:0%}}
+
+  /* ---------- confirm modal ---------- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(5,6,9,.6);backdrop-filter:blur(2px);z-index:500;
+      display:flex;align-items:center;justify-content:center;animation:toast-in .15s ease}
+  .modal-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;
+      max-width:360px;width:90%;box-shadow:var(--shadow)}
+  .modal-card p{margin:0 0 18px;font-size:.88rem;color:var(--text)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+
+  /* ---------- persona sub-tabs ---------- */
+  .subtab-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+  .subtab-btn{background:var(--surface-2);border:1px solid var(--border);color:var(--muted);padding:7px 14px;
+      border-radius:999px;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .12s}
+  .subtab-btn:hover{color:var(--text);border-color:var(--muted-2)}
+  .subtab-btn.active{background:var(--accent-soft);border-color:rgba(244,183,64,.4);color:var(--accent)}
+
+  /* ---------- toggle switch ---------- */
+  .switch-row{display:flex;align-items:center;gap:10px}
+  .switch{position:relative;display:inline-block;width:40px;height:23px;flex:0 0 40px}
+  .switch input{opacity:0;width:0;height:0}
+  .switch-track{position:absolute;inset:0;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+      cursor:pointer;transition:background .15s,border-color .15s}
+  .switch-track::before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;border-radius:50%;
+      background:var(--muted);transition:transform .18s,background .18s}
+  .switch input:checked + .switch-track{background:var(--accent-soft);border-color:rgba(244,183,64,.5)}
+  .switch input:checked + .switch-track::before{transform:translateX(17px);background:var(--accent)}
+
+  /* ---------- tier pills (choix visuel) ---------- */
+  .tier-pick{display:flex;gap:8px;flex-wrap:wrap}
+  .tier-pick-btn{border:1.5px solid var(--border);background:var(--surface-2);color:var(--muted);padding:7px 13px;
+      border-radius:999px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;transition:all .12s}
+  .tier-pick-btn.active{color:#0d0d0d}
+
+  /* ---------- carte catalogue : miniature + menu secondaire ---------- */
+  .catalog-card-thumb{width:100%;height:110px;border-radius:var(--radius-sm);object-fit:cover;background:var(--surface-2);margin-bottom:2px}
+  .catalog-add-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+      border:2px dashed var(--border);background:transparent;cursor:pointer;color:var(--muted);min-height:170px;
+      transition:border-color .15s,color .15s,background .15s}
+  .catalog-add-card:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .catalog-add-card .plus{font-size:1.8rem;font-weight:300;line-height:1}
+  .card-menu-wrap{position:relative}
+  .card-menu-list{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface-hover);border:1px solid var(--border);
+      border-radius:var(--radius-sm);box-shadow:0 10px 28px rgba(0,0,0,.4);z-index:20;min-width:160px;overflow:hidden}
+  .card-menu-list button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;
+      color:var(--text);padding:9px 12px;font-size:.8rem;cursor:pointer;font-family:inherit}
+  .card-menu-list button:hover{background:var(--surface-2)}
+  .card-menu-list button.danger{color:var(--red)}
+
+  /* ---------- panneau latéral (drawer) catalogue ---------- */
+  .drawer-overlay{position:fixed;inset:0;background:rgba(5,6,9,.55);z-index:300;animation:toast-in .15s ease}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:420px;max-width:92vw;background:var(--surface);
+      border-left:1px solid var(--border);z-index:301;overflow-y:auto;padding:24px;box-shadow:-16px 0 40px rgba(0,0,0,.4);
+      animation:drawer-in .22s ease}
+  @keyframes drawer-in{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+  .drawer h3{margin:0 0 18px;font-size:1.05rem}
+  .drawer-preview{border:1px solid var(--border);border-radius:var(--radius);padding:16px;background:var(--surface-2);margin-bottom:18px}
+
+  /* ---------- sales rows : bordure gauche selon le statut ---------- */
+  #salesTable tbody tr{border-left:3px solid transparent}
+  #salesTable tbody tr.row-paid{border-left-color:var(--green)}
+  #salesTable tbody tr.row-sent{border-left-color:var(--border)}
+
+  /* ---------- fan list : besoin d'attention (pause + dernier message du fan) ---------- */
+  .fan-item .attn-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent-2);
+      box-shadow:0 0 0 3px rgba(255,138,92,.18);margin-right:2px}
+
+  /* ---------- vault upload feedback ---------- */
+  .vault-card.uploading{opacity:.7;pointer-events:none}
+  .vault-thumb.pop-in{animation:pop-in .28s ease}
+  @keyframes pop-in{from{transform:scale(.85);opacity:0}to{transform:none;opacity:1}}
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:currentColor;
+      display:inline-block;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- live-ops : rendu "télémétrie" pour se distinguer du tableau de score ---------- */
+  .live-cell .lv{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
   /* ---------- responsive ---------- */
   @media (max-width: 880px){
     .layout{flex-direction:column}
@@ -290,6 +405,7 @@
       <div class="brand-mark">🐝</div>
       <div class="brand-text"><div class="name">Meeli</div><div class="tag">Admin</div></div>
     </div>
+    <div class="nav-section-label">Pilotage</div>
     <div class="nav-group">
       <button class="nav-btn active" data-tab="overview" onclick="showTab('overview')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M9.5 19.5v-6h5v6"/></svg>
@@ -303,6 +419,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 14.5h4"/></svg>
         Ventes
       </button>
+    </div>
+    <div class="nav-section-label">Configuration</div>
+    <div class="nav-group">
       <button class="nav-btn" data-tab="catalog" onclick="showTab('catalog')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>
         Catalogue
@@ -311,20 +430,26 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6.5" x2="20" y2="6.5"/><circle cx="9.5" cy="6.5" r="2.1"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.1"/><line x1="4" y1="17.5" x2="20" y2="17.5"/><circle cx="7.5" cy="17.5" r="2.1"/></svg>
         Persona &amp; Script
       </button>
-      <button class="nav-btn" data-tab="test" onclick="showTab('test')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3h5"/><path d="M10.3 3v6.2l-4.6 8a2 2 0 0 0 1.75 3h9.1a2 2 0 0 0 1.75-3l-4.6-8V3"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
-        Tester le bot
-      </button>
       <button class="nav-btn" data-tab="admins" onclick="showTab('admins')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15.5" r="4"/><path d="M11 12.5 20 3.5"/><path d="M16.5 6 19 8.5"/><path d="M13.5 9 16 11.5"/></svg>
         Accès admin
+      </button>
+    </div>
+    <div class="nav-section-label">Outils</div>
+    <div class="nav-group">
+      <button class="nav-btn" data-tab="test" onclick="showTab('test')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3h5"/><path d="M10.3 3v6.2l-4.6 8a2 2 0 0 0 1.75 3h9.1a2 2 0 0 0 1.75-3l-4.6-8V3"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
+        Tester le bot
       </button>
       <button class="nav-btn" data-tab="export" onclick="showTab('export')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 20.5h15"/></svg>
         Export
       </button>
     </div>
-    <div class="nav-foot">Meeli · tableau de bord</div>
+    <div class="nav-foot">
+      <div class="nav-bot-status"><span class="status-dot" id="botStatusDot"></span> <span id="botStatusLabel">Vérification…</span></div>
+      <div id="adminIdentity" style="margin-top:4px"></div>
+    </div>
   </nav>
 
   <main>
@@ -341,7 +466,7 @@
         <div class="credit-block" id="creditBlock"></div>
       </div>
 
-      <div class="stat-grid" id="stats"></div>
+      <div class="stat-grid stagger" id="stats"></div>
 
       <div class="panel">
         <h3>Revenu &amp; croissance (30 derniers jours)</h3>
@@ -425,24 +550,7 @@
     <!-- CATALOGUE -->
     <div class="tab-content" id="tab-catalog" style="display:none">
       <div class="page-head"><h2>Catalogue</h2><p>Les articles que Léa peut proposer aux fans.</p></div>
-      <div class="catalog-cards" id="catalogCards"></div>
-      <div class="panel">
-        <h3>Ajouter un article</h3>
-        <div class="row">
-          <div><label>Nom</label><input id="new_name" /></div>
-          <div><label>Tier</label>
-            <select id="new_tier"><option value="entry">entry</option><option value="standard" selected>standard</option><option value="premium">premium</option><option value="custom">custom</option></select>
-          </div>
-          <div><label>Prix</label><input id="new_price" type="number" step="0.01" /></div>
-          <div><label>Négociable</label><select id="new_negotiable"><option value="false">non</option><option value="true">oui</option></select></div>
-        </div>
-        <label>Description</label>
-        <textarea id="new_description"></textarea>
-        <label>Lien Dropp.fans</label>
-        <input id="new_dropfans_link" placeholder="https://app.dropp.fans/s/..." />
-        <br /><br />
-        <button class="btn btn-primary" onclick="addItem()">Ajouter au catalogue</button>
-      </div>
+      <div class="catalog-cards stagger" id="catalogCards"></div>
     </div>
 
     <!-- PERSONA & SCRIPT -->
@@ -450,8 +558,19 @@
       <div class="page-head"><h2>Persona &amp; Script</h2><p>La personnalité de l'IA et ses règles de vente.</p></div>
       <div class="banner warn" id="chatIdWarning" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>
-        <div><strong>Aucun chat_id Telegram configuré</strong> — tu ne reçois pas les alertes VIP / grosses ventes. Renseigne-le dans "Rythme &amp; alertes" ci-dessous.</div>
+        <div><strong>Aucun chat_id Telegram configuré</strong> — tu ne reçois pas les alertes VIP / grosses ventes. Renseigne-le dans "Alertes" ci-dessous.</div>
       </div>
+
+      <div class="subtab-row">
+        <button class="subtab-btn active" data-psec="identite" onclick="showPersonaSection('identite')">Identité</button>
+        <button class="subtab-btn" data-psec="style" onclick="showPersonaSection('style')">Style d'écriture</button>
+        <button class="subtab-btn" data-psec="script" onclick="showPersonaSection('script')">Script de vente</button>
+        <button class="subtab-btn" data-psec="contenu" onclick="showPersonaSection('contenu')">Contenu</button>
+        <button class="subtab-btn" data-psec="prix" onclick="showPersonaSection('prix')">Prix</button>
+        <button class="subtab-btn" data-psec="alertes" onclick="showPersonaSection('alertes')">Rythme &amp; alertes</button>
+      </div>
+
+      <div class="persona-section" data-psec-panel="identite">
       <div class="panel">
         <h3>Identité</h3>
         <div class="row">
@@ -461,10 +580,15 @@
         </div>
         <label>Ton</label>
         <textarea id="tone"></textarea>
-        <button class="btn btn-ghost btn-sm" onclick="showPromptPreview()" style="margin-top:8px">👁 Voir le prompt système actuel envoyé à l'IA</button>
+        <div class="row" style="margin-top:8px">
+          <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="showPromptPreview()">👁 Voir le prompt système actuel envoyé à l'IA</button></div>
+          <div style="flex:0"><button class="btn btn-ghost btn-sm" id="copyPromptBtn" style="display:none" onclick="copyPromptPreview()">📋 Copier</button></div>
+        </div>
         <pre id="promptPreview" class="prompt-preview" style="display:none"></pre>
       </div>
+      </div>
 
+      <div class="persona-section" data-psec-panel="style" style="display:none">
       <div class="panel">
         <h3>Style d'écriture</h3>
         <p class="muted" style="margin-top:-6px">Presets rapides (remplissent les champs ci-dessous, à ajuster ensuite) :</p>
@@ -496,7 +620,9 @@
           </div>
         </div>
       </div>
+      </div>
 
+      <div class="persona-section" data-psec-panel="script" style="display:none">
       <div class="panel">
         <h3>Messages &amp; script — 1. Accroche</h3>
         <label>Message d'accueil — variante A (variables: {persona_name}, {creator_name})</label>
@@ -519,15 +645,19 @@
         <label>6. Upsell (plus tard dans la conversation, jamais juste après une vente)</label>
         <textarea id="script_upsell"></textarea>
       </div>
+      </div>
 
+      <div class="persona-section" data-psec-panel="contenu" style="display:none">
       <div class="panel">
         <h3>Contenu par catégorie</h3>
         <p class="muted" style="margin-top:-6px">Dépose ici tes photos/vidéos organisées par catégorie. Les fichiers restent privés (jamais publics) — l'IA ne les voit jamais, elle sait juste ce qui existe dans chaque catégorie pour orienter un fan qui demande un type de contenu précis, sans jamais rien inventer ni décrire.</p>
-        <div class="vault-grid" id="vaultGrid"></div>
+        <div class="vault-grid stagger" id="vaultGrid"></div>
         <h4 style="margin:22px 0 10px;font-size:.9rem;color:var(--muted)">Fichiers déposés</h4>
         <div class="vault-gallery" id="vaultGallery"></div>
       </div>
+      </div>
 
+      <div class="persona-section" data-psec-panel="prix" style="display:none">
       <div class="panel">
         <h3>Prix &amp; négociation</h3>
         <div class="row">
@@ -537,7 +667,9 @@
           <div><label>Symbole monétaire (ex: $, €)</label><input id="currency_symbol" /></div>
         </div>
       </div>
+      </div>
 
+      <div class="persona-section" data-psec-panel="alertes" style="display:none">
       <div class="panel">
         <h3>Rythme &amp; alertes</h3>
         <div class="row">
@@ -556,6 +688,7 @@
         <textarea id="reengagement_message"></textarea>
         <br />
         <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      </div>
       </div>
     </div>
 
@@ -601,12 +734,17 @@
   </main>
 </div>
 
+<div id="toastStack"></div>
+<div id="modalRoot"></div>
+<div id="drawerRoot"></div>
+
 <script>
 let TOKEN = localStorage.getItem('meeli_admin_token') || '';
 let liveTimer = null;
 let overviewTimer = null;
 let selectedFanId = null;
 let testHistory = [];
+let threadMessageCounts = {};
 
 const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>';
 const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5 19.5 8.5 8 20H4v-4L15.5 4.5z"/></svg>';
@@ -621,6 +759,62 @@ function saveToken(){
   TOKEN = document.getElementById('tokenInput').value.trim();
   localStorage.setItem('meeli_admin_token', TOKEN);
   boot();
+}
+
+// ---- Toasts (remplace les alert() natifs du navigateur) ----
+function showToast(message, isError){
+  const stack = document.getElementById('toastStack');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' err' : '');
+  el.innerHTML = `<div>${message}</div><div class="toast-bar"></div>`;
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), 3400);
+}
+
+// ---- Confirmation stylée (remplace confirm() natif) — retourne une Promise<boolean> ----
+function showConfirm(message, confirmLabel){
+  return new Promise((resolve) => {
+    const root = document.getElementById('modalRoot');
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card">
+        <p>${message}</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-sm" id="modalCancelBtn">Annuler</button>
+          <button class="btn btn-danger btn-sm" id="modalConfirmBtn">${confirmLabel || 'Confirmer'}</button>
+        </div>
+      </div>`;
+    root.appendChild(overlay);
+    const cleanup = (result) => { overlay.remove(); resolve(result); };
+    overlay.querySelector('#modalCancelBtn').onclick = () => cleanup(false);
+    overlay.querySelector('#modalConfirmBtn').onclick = () => cleanup(true);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+  });
+}
+
+// ---- Statut du bot (point vert/rouge en bas de la nav) + identité de l'admin connecté ----
+let botStatusTimer = null;
+async function checkBotStatus(){
+  const dot = document.getElementById('botStatusDot');
+  const label = document.getElementById('botStatusLabel');
+  if (!dot) return;
+  try {
+    const res = await fetch('/health');
+    if (res.ok) { dot.className = 'status-dot up'; label.textContent = 'Bot en ligne'; }
+    else throw new Error('down');
+  } catch(e) {
+    dot.className = 'status-dot down'; label.textContent = 'Bot injoignable';
+  }
+}
+
+async function loadAdminIdentity(){
+  try {
+    const admins = await api('/api/admin/admins');
+    const mine = admins.find(a => a.token === TOKEN);
+    const el = document.getElementById('adminIdentity');
+    if (el) el.textContent = mine ? `Connecté : ${mine.label}` : '';
+  } catch(e) { /* silencieux — pas critique */ }
 }
 
 async function api(path, opts = {}) {
@@ -653,6 +847,13 @@ function showTab(name){
   if (name === 'persona') loadVault();
 }
 
+function showPersonaSection(name){
+  document.querySelectorAll('.persona-section').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.subtab-btn').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.persona-section[data-psec-panel="${name}"]`).style.display = 'block';
+  document.querySelector(`.subtab-btn[data-psec="${name}"]`).classList.add('active');
+}
+
 async function boot(){
   if (!TOKEN) return;
   try {
@@ -661,6 +862,9 @@ async function boot(){
     document.getElementById('gate').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     if (!overviewTimer) overviewTimer = setInterval(loadLiveOps, 10000);
+    loadAdminIdentity();
+    checkBotStatus();
+    if (!botStatusTimer) botStatusTimer = setInterval(checkBotStatus, 20000);
   } catch(e) { console.error(e); }
 }
 
@@ -673,23 +877,59 @@ function fmtUptime(sec){
   return `${m}min`;
 }
 
+// Anime un chiffre de son ancienne à sa nouvelle valeur au lieu de le
+// remplacer d'un coup — donne un vrai effet "vivant" à chaque rafraîchissement.
+function animateCount(el, from, to, duration){
+  if (!el) return;
+  if (from === to) { el.textContent = to; return; }
+  const start = performance.now();
+  duration = duration || 600;
+  function tick(now){
+    const t = Math.min(1, (now - start) / duration);
+    el.textContent = Math.round(from + (to - from) * t);
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+let previousLiveOpsValues = null;
+
 async function loadLiveOps(){
   let s;
   try { s = await api('/api/admin/live-stats'); } catch(e) { return; }
   document.getElementById('liveOpsUpdated').textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR');
 
   const cells = [
-    { lv: s.active1h, ll: 'Chats actifs (1h)' },
-    { lv: s.active24h, ll: 'Chats actifs (24h)' },
-    { lv: s.pausedCount, ll: 'IA en pause' },
-    { lv: s.messagesToday, ll: 'Messages aujourd\'hui' },
-    { lv: s.safetyToday, ll: 'Incidents sécurité (jour)' },
-    { lv: s.queueSize, ll: 'File d\'attente' },
-    { lv: fmtUptime(s.uptimeSeconds), ll: 'Bot en ligne depuis' },
+    { key:'active1h', lv: s.active1h, ll: 'Chats actifs (1h)' },
+    { key:'active24h', lv: s.active24h, ll: 'Chats actifs (24h)' },
+    { key:'pausedCount', lv: s.pausedCount, ll: 'IA en pause' },
+    { key:'messagesToday', lv: s.messagesToday, ll: 'Messages aujourd\'hui' },
+    { key:'safetyToday', lv: s.safetyToday, ll: 'Incidents sécurité (jour)' },
+    { key:'queueSize', lv: s.queueSize, ll: 'File d\'attente' },
+    { key:'uptime', lv: fmtUptime(s.uptimeSeconds), ll: 'Bot en ligne depuis', text: true },
   ];
   document.getElementById('liveOpsGrid').innerHTML = cells.map(c => `
-    <div class="live-cell"><div class="lv">${c.lv ?? 0}</div><div class="ll">${c.ll}</div></div>
+    <div class="live-cell" id="live-cell-${c.key}"><div class="lv" id="live-lv-${c.key}">${c.text ? c.lv : 0}</div><div class="ll">${c.ll}</div></div>
   `).join('');
+
+  const nextValues = {};
+  cells.forEach(c => {
+    const lvEl = document.getElementById('live-lv-' + c.key);
+    if (c.text) { lvEl.textContent = c.lv; return; }
+    const to = c.lv ?? 0;
+    nextValues[c.key] = to;
+    const from = previousLiveOpsValues ? (previousLiveOpsValues[c.key] ?? to) : to;
+    animateCount(lvEl, from, to);
+    // Un léger flash vert sur la carte quand une valeur bouge réellement
+    // entre deux rafraîchissements (pas au tout premier chargement).
+    if (previousLiveOpsValues && from !== to) {
+      const cellEl = document.getElementById('live-cell-' + c.key);
+      cellEl.classList.remove('flash-update');
+      void cellEl.offsetWidth; // force le redémarrage de l'animation CSS
+      cellEl.classList.add('flash-update');
+    }
+  });
+  previousLiveOpsValues = nextValues;
 
   const cr = s.aiCredit || {};
   const creditBlock = document.getElementById('creditBlock');
@@ -725,8 +965,9 @@ async function loadLiveOps(){
 
 async function updateCreditBalance(){
   const val = parseFloat(document.getElementById('creditBalanceInput').value);
-  if (Number.isNaN(val) || val < 0) { alert('Entre un montant valide.'); return; }
+  if (Number.isNaN(val) || val < 0) { showToast('Entre un montant valide.', true); return; }
   await api('/api/admin/ai-credit-balance', { method:'PUT', body: JSON.stringify({ amount: val }) });
+  showToast('Solde mis à jour ✅');
   loadLiveOps();
 }
 
@@ -825,7 +1066,7 @@ async function saveSettings(){
   fields.forEach(f => payload[f] = document.getElementById(f).value);
   numFields.forEach(f => payload[f] = parseFloat(document.getElementById(f).value));
   await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(payload) });
-  alert('Réglages enregistrés ✅');
+  showToast('Réglages enregistrés ✅');
 }
 
 const TONE_PRESETS = {
@@ -858,13 +1099,44 @@ function applyTonePreset(name){
   });
 }
 
+let lastPromptText = '';
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Colore légèrement les lignes qui ressemblent à des titres de section
+// (ex: "CONCIENCIA DEL TIEMPO:") pour rendre ce mur de texte plus lisible —
+// le texte est échappé AVANT toute mise en forme, donc pas d'injection
+// possible même si une note de fan (mémorisée par l'IA) contient du HTML.
+function highlightPrompt(text){
+  return escapeHtml(text).split('\n').map(line => {
+    if (/^[A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 :\-\/()]{3,60}:$/.test(line.trim())) {
+      return `<span style="color:var(--accent);font-weight:700">${line}</span>`;
+    }
+    return line;
+  }).join('\n');
+}
+
 async function showPromptPreview(){
   const el = document.getElementById('promptPreview');
-  if (el.style.display === 'block') { el.style.display = 'none'; return; }
+  const copyBtn = document.getElementById('copyPromptBtn');
+  if (el.style.display === 'block') { el.style.display = 'none'; copyBtn.style.display = 'none'; return; }
   el.textContent = 'Chargement...';
   el.style.display = 'block';
   const res = await api('/api/admin/system-prompt-preview');
-  el.textContent = res.prompt || res.error || '(vide)';
+  lastPromptText = res.prompt || res.error || '(vide)';
+  el.innerHTML = highlightPrompt(lastPromptText);
+  copyBtn.style.display = 'inline-flex';
+}
+
+async function copyPromptPreview(){
+  try {
+    await navigator.clipboard.writeText(lastPromptText || '');
+    showToast('Prompt copié ✅');
+  } catch(e) {
+    showToast('Impossible de copier — sélectionne le texte manuellement.', true);
+  }
 }
 
 // ---- Coffre de contenu ----
@@ -877,6 +1149,7 @@ const VAULT_CATEGORIES = [
   { key: 'otro', icon: '➕', label: 'Autre' },
 ];
 let vaultCache = [];
+let previousVaultIds = new Set();
 
 async function loadVault(){
   vaultCache = await api('/api/admin/vault');
@@ -906,39 +1179,56 @@ function renderVaultGrid(){
 }
 
 function renderVaultGallery(){
+  const currentIds = new Set(vaultCache.map(v => v.id));
   document.getElementById('vaultGallery').innerHTML = vaultCache.map(v => {
     const cat = VAULT_CATEGORIES.find(c => c.key === v.category);
     const inner = v.media_type === 'photo' && v.url
       ? `<img src="${v.url}" loading="lazy" />`
       : `<span class="vault-video-badge">🎬</span>`;
+    const isNew = !previousVaultIds.has(v.id) && previousVaultIds.size > 0;
     return `
-      <div class="vault-thumb">
+      <div class="vault-thumb${isNew ? ' pop-in' : ''}">
         ${inner}
         <button class="vault-del" onclick="deleteVaultFile('${v.id}')" title="Supprimer">✕</button>
         <div class="vault-cat-label">${cat ? cat.icon+' '+cat.label : v.category}</div>
       </div>
     `;
   }).join('') || '<p class="muted">Aucun fichier déposé pour l\'instant.</p>';
+  previousVaultIds = currentIds;
 }
 
 async function uploadVaultFiles(category){
   const fileInput = document.getElementById('vault_files_'+category);
   const files = fileInput.files;
-  if (!files || !files.length) { alert('Choisis au moins un fichier.'); return; }
+  if (!files || !files.length) { showToast('Choisis au moins un fichier.', true); return; }
   const catalog_item_id = document.getElementById('vault_link_'+category).value;
   const formData = new FormData();
   formData.append('category', category);
   if (catalog_item_id) formData.append('catalog_item_id', catalog_item_id);
   Array.from(files).forEach(f => formData.append('files', f));
-  const res = await fetch('/api/admin/vault/upload', { method:'POST', headers:{ 'X-Admin-Token': TOKEN }, body: formData });
-  if (!res.ok) { alert('Erreur pendant l\'envoi.'); return; }
-  fileInput.value = '';
-  loadVault();
+
+  const card = fileInput.closest('.vault-card');
+  const btn = card ? card.querySelector('button.btn') : null;
+  const btnLabel = btn ? btn.innerHTML : '';
+  if (card) card.classList.add('uploading');
+  if (btn) btn.innerHTML = '<span class="spinner"></span> Envoi...';
+
+  try {
+    const res = await fetch('/api/admin/vault/upload', { method:'POST', headers:{ 'X-Admin-Token': TOKEN }, body: formData });
+    if (!res.ok) { showToast('Erreur pendant l\'envoi.', true); return; }
+    fileInput.value = '';
+    showToast('Fichier(s) déposé(s) ✅');
+    await loadVault();
+  } finally {
+    if (card) card.classList.remove('uploading');
+    if (btn) btn.innerHTML = btnLabel;
+  }
 }
 
 async function deleteVaultFile(id){
-  if (!confirm('Supprimer ce fichier définitivement ?')) return;
+  if (!(await showConfirm('Supprimer ce fichier définitivement ?'))) return;
   await api('/api/admin/vault/'+id, { method:'DELETE' });
+  showToast('Fichier supprimé');
   loadVault();
 }
 
@@ -956,7 +1246,7 @@ async function loadSales(){
     const statusPill = s.status === 'paid'
       ? '<span class="pill" style="background:rgba(52,211,153,.15);color:var(--green)">✅ Payé</span>'
       : '<span class="pill pill-new">Envoyé</span>';
-    return `<tr>
+    return `<tr class="${s.status === 'paid' ? 'row-paid' : 'row-sent'}">
       <td>${fanLabel}</td><td>${itemLabel}</td><td>${fmtMoney(s.price)}</td><td>${s.payment_method||'dropfans'}</td>
       <td>${statusPill}</td><td>${new Date(s.created_at).toLocaleString()}</td>
       <td>${s.status !== 'paid' ? `<button class="btn btn-primary btn-sm" onclick="confirmSaleRow('${s.id}')">Confirmer payé</button>` : ''}</td>
@@ -966,6 +1256,7 @@ async function loadSales(){
 
 async function confirmSaleRow(id){
   await api('/api/admin/sales/'+id+'/confirm', { method:'PUT', body: JSON.stringify({}) });
+  showToast('Vente marquée payée ✅');
   loadSales();
 }
 
@@ -974,116 +1265,219 @@ async function addManualSale(){
   const catalog_item_id = document.getElementById('manual_sale_item').value || null;
   const price = parseFloat(document.getElementById('manual_sale_price').value);
   const payment_method = document.getElementById('manual_sale_method').value;
-  if (!fan_id || !price) { alert('Choisis un fan et un prix.'); return; }
+  if (!fan_id || !price) { showToast('Choisis un fan et un prix.', true); return; }
   await api('/api/admin/sales/manual', { method:'POST', body: JSON.stringify({ fan_id, catalog_item_id, price, payment_method }) });
   document.getElementById('manual_sale_price').value = '';
+  showToast('Vente enregistrée ✅');
   loadSales();
 }
 
 let catalogCache = [];
 let currencySymbol = '$';
+let vaultThumbByItem = {};
+let openCardMenuId = null;
+let drawerState = null;
 
 async function loadCatalog(){
   const [items, settings] = await Promise.all([api('/api/admin/catalog'), api('/api/admin/settings')]);
   catalogCache = items;
   currencySymbol = settings.currency_symbol || '$';
+  // Miniature = première photo du coffre de contenu liée à cet article (si
+  // il y en a une) — pour relier visuellement l'offre au contenu réel.
+  try {
+    const vault = await api('/api/admin/vault');
+    vaultThumbByItem = {};
+    (vault || []).forEach(v => {
+      if (v.catalog_item_id && v.media_type === 'photo' && v.url && !vaultThumbByItem[v.catalog_item_id]) {
+        vaultThumbByItem[v.catalog_item_id] = v.url;
+      }
+    });
+  } catch(e) { vaultThumbByItem = {}; }
   renderCatalog();
 }
 
 function renderCatalog(){
-  document.getElementById('catalogCards').innerHTML = catalogCache.map(it => `
-    <div class="catalog-card ${it.active ? '' : 'off'}" id="card-${it.id}" style="border-top:3px solid ${TIER_COLORS[it.tier]||TIER_COLORS.entry}">
-      <div id="view-${it.id}">
-        <h4>${it.name} <span class="pill pill-tier-${it.tier}">${it.tier}</span> ${it.active ? '' : '<span class="pill pill-off">inactif</span>'}</h4>
-        <div class="desc">${it.description||''}</div>
-        <div class="price">${fmtMoney(it.price)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</div>
-        <div>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien ↗</a>' : '<span class="chip-warn">'+ICON_WARN+' pas de lien Dropp.fans</span>'}</div>
-        <div class="catalog-actions">
-          <button class="btn btn-ghost btn-sm" onclick="startEdit('${it.id}')">${ICON_EDIT} Modifier</button>
-          <button class="btn btn-ghost btn-sm" onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
-          <button class="btn btn-ghost btn-sm" onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
+  const cards = catalogCache.map(it => {
+    const thumb = vaultThumbByItem[it.id];
+    return `
+    <div class="catalog-card ${it.active ? '' : 'off'}" style="border-top:3px solid ${TIER_COLORS[it.tier]||TIER_COLORS.entry}">
+      ${thumb ? `<img class="catalog-card-thumb" src="${thumb}" loading="lazy" />` : ''}
+      <h4>${it.name} <span class="pill pill-tier-${it.tier}">${it.tier}</span> ${it.active ? '' : '<span class="pill pill-off">inactif</span>'}</h4>
+      <div class="desc">${it.description||''}</div>
+      <div class="price">${fmtMoney(it.price)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</div>
+      <div>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien ↗</a>' : '<span class="chip-warn">'+ICON_WARN+' pas de lien Dropp.fans</span>'}</div>
+      <div class="catalog-actions">
+        <button class="btn btn-ghost btn-sm" onclick="openCatalogDrawer('edit','${it.id}')">${ICON_EDIT} Modifier</button>
+        <div class="card-menu-wrap">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="toggleCardMenu('${it.id}', event)" title="Plus d'actions">⋯</button>
+          ${openCardMenuId === it.id ? `
+            <div class="card-menu-list">
+              <button onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
+              <button onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
+              <button class="danger" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
+            </div>` : ''}
         </div>
       </div>
-      <div id="edit-${it.id}" style="display:none">
-        <label>Nom</label><input id="edit_name_${it.id}" value="${(it.name||'').replace(/"/g,'&quot;')}" />
-        <label>Description</label><textarea id="edit_description_${it.id}">${it.description||''}</textarea>
-        <div class="row">
-          <div><label>Tier</label>
-            <select id="edit_tier_${it.id}">
-              ${['entry','standard','premium','custom'].map(t => `<option value="${t}" ${t===it.tier?'selected':''}>${t}</option>`).join('')}
-            </select>
-          </div>
-          <div><label>Prix</label><input id="edit_price_${it.id}" type="number" step="0.01" value="${it.price}" /></div>
-          <div><label>Négociable</label>
-            <select id="edit_negotiable_${it.id}">
-              <option value="false" ${!it.is_negotiable?'selected':''}>non</option>
-              <option value="true" ${it.is_negotiable?'selected':''}>oui</option>
-            </select>
-          </div>
-        </div>
-        <label>Lien Dropp.fans</label>
-        <input id="edit_link_${it.id}" value="${it.dropfans_link||''}" />
-        <br /><br />
-        <div class="catalog-actions">
-          <button class="btn btn-primary btn-sm" onclick="saveEdit('${it.id}')">Enregistrer</button>
-          <button class="btn btn-ghost btn-sm" onclick="cancelEdit('${it.id}')">Annuler</button>
-        </div>
-      </div>
-    </div>
-  `).join('') || '<p class="muted">Aucun article dans le catalogue.</p>';
+    </div>`;
+  }).join('');
+  const addCard = `<div class="catalog-card catalog-add-card" onclick="openCatalogDrawer('add')"><div class="plus">+</div><div>Ajouter un article</div></div>`;
+  document.getElementById('catalogCards').innerHTML = (cards || '<p class="muted">Aucun article dans le catalogue.</p>') + addCard;
 }
 
-function startEdit(id){
-  document.getElementById('view-'+id).style.display = 'none';
-  document.getElementById('edit-'+id).style.display = 'block';
+function toggleCardMenu(id, ev){
+  if (ev) ev.stopPropagation();
+  openCardMenuId = openCardMenuId === id ? null : id;
+  renderCatalog();
 }
-
-function cancelEdit(id){
-  document.getElementById('view-'+id).style.display = 'block';
-  document.getElementById('edit-'+id).style.display = 'none';
-}
-
-async function saveEdit(id){
-  await api('/api/admin/catalog/'+id, { method:'PUT', body: JSON.stringify({
-    name: document.getElementById('edit_name_'+id).value,
-    description: document.getElementById('edit_description_'+id).value,
-    tier: document.getElementById('edit_tier_'+id).value,
-    price: parseFloat(document.getElementById('edit_price_'+id).value),
-    is_negotiable: document.getElementById('edit_negotiable_'+id).value === 'true',
-    dropfans_link: document.getElementById('edit_link_'+id).value || null,
-  })});
-  loadCatalog();
-}
+document.addEventListener('click', () => { if (openCardMenuId) { openCardMenuId = null; renderCatalog(); } });
 
 async function duplicateItem(id){
+  openCardMenuId = null;
   const it = catalogCache.find(x => x.id === id);
   if (!it) return;
   await api('/api/admin/catalog', { method:'POST', body: JSON.stringify({
     name: it.name + ' (copie)', tier: it.tier, price: it.price, is_negotiable: it.is_negotiable,
     description: it.description, dropfans_link: null, active: false, sort_order: 99,
   })});
+  showToast('Article dupliqué ✅');
   loadCatalog();
 }
 
 async function deleteItem(id){
-  if (!confirm('Supprimer définitivement cet article du catalogue ?')) return;
+  openCardMenuId = null;
+  if (!(await showConfirm('Supprimer définitivement cet article du catalogue ?', 'Supprimer'))) return;
   await api('/api/admin/catalog/'+id, { method:'DELETE' });
+  showToast('Article supprimé');
   loadCatalog();
 }
 
 async function toggleActive(id, active){
+  openCardMenuId = null;
   await api('/api/admin/catalog/'+id, { method:'PUT', body: JSON.stringify({ active }) });
+  showToast(active ? 'Article activé ✅' : 'Article désactivé');
   loadCatalog();
 }
 
-async function addItem(){
-  await api('/api/admin/catalog', { method:'POST', body: JSON.stringify({
-    name: new_name.value, tier: new_tier.value, price: parseFloat(new_price.value),
-    is_negotiable: new_negotiable.value === 'true', description: new_description.value,
-    dropfans_link: new_dropfans_link.value || null, active: true, sort_order: 99,
-  })});
-  new_name.value=''; new_price.value=''; new_description.value=''; new_dropfans_link.value='';
+// ---- Panneau latéral d'ajout/modification (remplace le formulaire fixe +
+// l'édition inline — un seul flux, avec aperçu en direct de la carte) ----
+function openCatalogDrawer(mode, id){
+  const it = mode === 'edit' ? catalogCache.find(x => x.id === id) : null;
+  drawerState = {
+    mode, id,
+    name: it ? it.name || '' : '',
+    tier: it ? it.tier || 'standard' : 'standard',
+    price: it && it.price != null ? it.price : '',
+    negotiable: it ? !!it.is_negotiable : false,
+    active: it ? !!it.active : true,
+    description: it ? it.description || '' : '',
+    dropfans_link: it ? it.dropfans_link || '' : '',
+  };
+  renderCatalogDrawer();
+}
+
+function closeCatalogDrawer(){
+  drawerState = null;
+  document.getElementById('drawerRoot').innerHTML = '';
+}
+
+function renderCatalogDrawer(){
+  const s = drawerState;
+  document.getElementById('drawerRoot').innerHTML = `
+    <div class="drawer-overlay" onclick="if(event.target===this) closeCatalogDrawer()">
+      <div class="drawer" onclick="event.stopPropagation()">
+        <h3>${s.mode==='add' ? 'Ajouter un article' : "Modifier l'article"}</h3>
+        <div class="drawer-preview" id="drawerPreview"></div>
+        <label style="margin-top:0">Nom</label>
+        <input id="d_name" value="${(s.name||'').replace(/"/g,'&quot;')}" oninput="onDrawerInput()" />
+        <label>Tier</label>
+        <div class="tier-pick" id="d_tier_pick"></div>
+        <label>Prix</label>
+        <input id="d_price" type="number" step="0.01" value="${s.price}" oninput="onDrawerInput()" />
+        <label>Description</label>
+        <textarea id="d_description" oninput="onDrawerInput()">${s.description}</textarea>
+        <label>Lien Dropp.fans</label>
+        <input id="d_link" value="${s.dropfans_link}" placeholder="https://app.dropp.fans/s/..." oninput="onDrawerInput()" />
+        <div id="d_link_warning"></div>
+        <div class="switch-row" style="margin-top:16px">
+          <label class="switch"><input type="checkbox" id="d_negotiable" ${s.negotiable?'checked':''} onchange="onDrawerInput()" /><span class="switch-track"></span></label>
+          <span style="font-size:.85rem">Négociable</span>
+        </div>
+        <div class="switch-row" style="margin-top:10px">
+          <label class="switch"><input type="checkbox" id="d_active" ${s.active?'checked':''} onchange="onDrawerInput()" /><span class="switch-track"></span></label>
+          <span style="font-size:.85rem">Actif (visible pour l'IA)</span>
+        </div>
+        <div class="catalog-actions" style="margin-top:20px">
+          <button class="btn btn-primary" onclick="saveCatalogDrawer()">${s.mode==='add' ? 'Ajouter au catalogue' : 'Enregistrer'}</button>
+          <button class="btn btn-ghost" onclick="closeCatalogDrawer()">Annuler</button>
+        </div>
+      </div>
+    </div>
+  `;
+  renderTierPick();
+  refreshDrawerPreview();
+}
+
+function renderTierPick(){
+  const tiers = ['entry','standard','premium','custom'];
+  document.getElementById('d_tier_pick').innerHTML = tiers.map(t => {
+    const active = drawerState.tier === t;
+    const color = TIER_COLORS[t];
+    return `<button type="button" class="tier-pick-btn${active?' active':''}" style="${active?`background:${color};border-color:${color}`:''}" onclick="setDrawerTier('${t}')">${t}</button>`;
+  }).join('');
+}
+
+function setDrawerTier(t){
+  drawerState.tier = t;
+  renderTierPick();
+  refreshDrawerPreview();
+}
+
+function onDrawerInput(){
+  drawerState.name = document.getElementById('d_name').value;
+  drawerState.price = document.getElementById('d_price').value;
+  drawerState.description = document.getElementById('d_description').value;
+  drawerState.dropfans_link = document.getElementById('d_link').value;
+  drawerState.negotiable = document.getElementById('d_negotiable').checked;
+  drawerState.active = document.getElementById('d_active').checked;
+  refreshDrawerPreview();
+}
+
+function refreshDrawerPreview(){
+  const s = drawerState;
+  const priceNum = parseFloat(s.price);
+  document.getElementById('drawerPreview').innerHTML = `
+    <div class="catalog-card ${s.active?'':'off'}" style="border-top:3px solid ${TIER_COLORS[s.tier]||TIER_COLORS.entry};margin:0">
+      <h4>${s.name || '(sans nom)'} <span class="pill pill-tier-${s.tier}">${s.tier}</span> ${s.active?'':'<span class="pill pill-off">inactif</span>'}</h4>
+      <div class="desc">${s.description||''}</div>
+      <div class="price">${Number.isNaN(priceNum) ? '—' : fmtMoney(priceNum)} ${s.negotiable ? '<span class="chip">négociable</span>' : ''}</div>
+    </div>
+  `;
+  const warn = document.getElementById('d_link_warning');
+  if (warn) {
+    warn.innerHTML = s.dropfans_link
+      ? ''
+      : `<div class="chip-warn" style="margin-top:6px">${ICON_WARN} Sans ce lien, l'IA ne pourra pas vendre cet article</div>`;
+  }
+}
+
+async function saveCatalogDrawer(){
+  const s = drawerState;
+  if (!s.name.trim()) { showToast('Le nom est obligatoire.', true); return; }
+  const price = parseFloat(s.price);
+  if (Number.isNaN(price)) { showToast('Entre un prix valide.', true); return; }
+  const payload = {
+    name: s.name, tier: s.tier, price, is_negotiable: s.negotiable, active: s.active,
+    description: s.description, dropfans_link: s.dropfans_link || null,
+  };
+  if (s.mode === 'add') {
+    payload.sort_order = 99;
+    await api('/api/admin/catalog', { method:'POST', body: JSON.stringify(payload) });
+    showToast('Article ajouté ✅');
+  } else {
+    await api('/api/admin/catalog/'+s.id, { method:'PUT', body: JSON.stringify(payload) });
+    showToast('Article mis à jour ✅');
+  }
+  closeCatalogDrawer();
   loadCatalog();
 }
 
@@ -1118,18 +1512,24 @@ function profileBlock(label, value, danger){
 
 async function loadFans(){
   const fans = await api('/api/admin/fans');
-  document.getElementById('fanList').innerHTML = fans.map(f => `
+  document.getElementById('fanList').innerHTML = fans.map(f => {
+    // Un fan en pause dont le dernier message vient de lui attend une réponse
+    // manuelle — on le signale par un point distinct pour le repérer d'un
+    // coup d'œil sans avoir à ouvrir chaque conversation.
+    const needsAttention = f.paused && f.last_message && f.last_message.role === 'fan';
+    return `
     <div class="fan-item ${f.id===selectedFanId?'active':''}" onclick="openFan('${f.id}')">
       <div class="avatar" style="box-shadow:0 0 0 2px ${f.paused ? 'var(--red)' : (STATUS_COLORS[f.status]||STATUS_COLORS.new)}">${initials(f)}</div>
       <div class="meta">
         <div class="name-row">
-          <span class="name">${potentialIcon(f.potential)}${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
+          <span class="name">${needsAttention ? '<span class="attn-dot" title="En attente d\'une réponse"></span> ' : ''}${potentialIcon(f.potential)}${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
           ${f.paused ? '<span class="pill pill-off">⏸ pausé</span>' : `<span class="pill pill-${f.status}">${f.status}</span>`}
         </div>
         <div class="preview">${f.last_message ? (f.last_message.role==='fan'?'':'→ ') + f.last_message.content : ''}</div>
       </div>
     </div>
-  `).join('') || "<div class=\"muted\" style=\"padding:14px\">Aucun fan pour l'instant</div>";
+  `;
+  }).join('') || "<div class=\"muted\" style=\"padding:14px\">Aucun fan pour l'instant</div>";
   if (selectedFanId) loadThread(selectedFanId, true);
 }
 
@@ -1161,7 +1561,16 @@ async function loadThread(id, silent){
       ${profileBlock('⚠️ Alerte', f.red_flags_notes, true)}
     </div>
   `;
-  document.getElementById('thread').innerHTML = data.messages.map(m => `<div class="msg ${m.role==='fan'?'fan':'assistant'}">${m.content}</div>`).join('');
+  // On n'anime l'apparition que des messages réellement nouveaux depuis le
+  // dernier rendu de cette conversation — sinon tout le fil se ré-animerait
+  // à chaque rafraîchissement automatique (toutes les 5s), ce qui serait
+  // agaçant plutôt que vivant.
+  const previousCount = threadMessageCounts[id] || 0;
+  document.getElementById('thread').innerHTML = data.messages.map((m, i) => {
+    const isNew = i >= previousCount && previousCount > 0;
+    return `<div class="msg ${m.role==='fan'?'fan':'assistant'}${isNew ? ' msg-in' : ''}">${m.content}</div>`;
+  }).join('');
+  threadMessageCounts[id] = data.messages.length;
   document.getElementById('composerWrap').style.display = f.paused ? 'flex' : 'none';
 }
 
@@ -1195,10 +1604,12 @@ async function loadSafetyIncidents(){
 }
 
 // ---- Test / simulateur ----
+let testRenderedCount = 0;
 function renderTestThread(){
-  document.getElementById('testThread').innerHTML = testHistory.map(m =>
-    `<div class="msg ${m.warn ? 'warn-msg' : (m.role==='fan'?'fan':'assistant')}">${m.content}</div>`
+  document.getElementById('testThread').innerHTML = testHistory.map((m, i) =>
+    `<div class="msg ${m.warn ? 'warn-msg' : (m.role==='fan'?'fan':'assistant')}${i >= testRenderedCount ? ' msg-in' : ''}">${m.content}</div>`
   ).join('');
+  testRenderedCount = testHistory.length;
 }
 
 async function sendTestMessage(){
@@ -1221,7 +1632,7 @@ async function sendTestMessage(){
   renderTestThread();
 }
 
-function resetTest(){ testHistory = []; renderTestThread(); }
+function resetTest(){ testHistory = []; testRenderedCount = 0; renderTestThread(); }
 
 // ---- Admins ----
 async function loadAdmins(){
@@ -1239,7 +1650,9 @@ async function addAdmin(){
 }
 
 async function removeAdmin(id){
+  if (!(await showConfirm('Révoquer cet accès admin ? La personne ne pourra plus se connecter avec ce token.', 'Révoquer'))) return;
   await api('/api/admin/admins/'+id, { method:'DELETE' });
+  showToast('Accès révoqué');
   loadAdmins();
 }
 

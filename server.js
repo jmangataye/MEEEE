@@ -151,6 +151,108 @@ function runSerializedForFan(fanKey, task) {
   return next;
 }
 
+// ---------- Messages non-textuels (photo/vocal/sticker/vidéo/document) ----------
+// Avant: un fan qui envoie autre chose que du texte pur tombait dans un
+// silence total (aucune réponse, aucune trace) — repéré en creusant le 29/08.
+// On détecte maintenant le type, on journalise l'événement (jamais le fichier
+// lui-même, juste la trace qu'il est arrivé) et on répond par un message fixe
+// adapté — sans appeler Claude pour ça, ce serait un coût inutile pour une
+// réponse toujours identique.
+const MEDIA_TYPE_REPLIES = {
+  photo: { log: '[foto recibida]', reply: 'uy no puedo ver fotos por aquí todavía, cuéntame con palabras que tienes en mente 😉' },
+  video: { log: '[video recibido]', reply: 'no puedo ver videos por aquí todavía, cuéntame con palabras que buscas 😊' },
+  video_note: { log: '[video recibido]', reply: 'no puedo ver videos por aquí todavía, cuéntame con palabras que buscas 😊' },
+  voice: { log: '[audio recibido]', reply: 'no puedo escuchar audios aquí todavía, cuéntamelo con palabras 😉' },
+  audio: { log: '[audio recibido]', reply: 'no puedo escuchar audios aquí todavía, cuéntamelo con palabras 😉' },
+  sticker: { log: '[sticker recibido]', reply: 'jajaja me encanta, pero cuéntame con palabras que tienes en mente 😏' },
+  document: { log: '[archivo recibido]', reply: 'no puedo abrir archivos por aquí, cuéntame con palabras 😉' },
+};
+
+function detectMediaType(msg) {
+  if (msg.photo) return 'photo';
+  if (msg.voice) return 'voice';
+  if (msg.video_note) return 'video_note';
+  if (msg.video) return 'video';
+  if (msg.sticker) return 'sticker';
+  if (msg.audio) return 'audio';
+  if (msg.document) return 'document';
+  return null;
+}
+
+async function handleNonTextMessage(msg, mediaType) {
+  try {
+    const chatId = msg.chat.id;
+    const settings = await getSettings();
+    const fan = await getOrCreateFan({
+      telegram_user_id: msg.from.id,
+      telegram_username: msg.from.username,
+      first_name: msg.from.first_name,
+    });
+    const meta = MEDIA_TYPE_REPLIES[mediaType] || MEDIA_TYPE_REPLIES.document;
+    await logMessage(fan.id, 'fan', meta.log);
+
+    // Même règle que pour le texte : si la conversation est en pause, on
+    // journalise mais on ne répond pas automatiquement.
+    if (fan.paused) {
+      console.log(`Fan ${fan.id} en pause — média (${mediaType}) reçu, pas de réponse automatique.`);
+      return;
+    }
+    await replyToFan({ settings, chatId, fan, text: meta.reply });
+  } catch (err) {
+    console.error('Erreur traitement média fan:', err);
+  }
+}
+
+// ---------- Regroupement des messages rapprochés (anti-spam / anti-fragmentation) ----------
+// Avant: chaque message texte d'un fan déclenchait immédiatement son propre
+// appel à Claude — un fan qui tape 3-4 messages coup sur coup (très courant)
+// coûtait 3-4 appels API et pouvait produire des réponses fragmentées. On met
+// maintenant chaque message en attente quelques secondes par fan : s'il en
+// arrive un autre entre-temps, on l'ajoute au même lot et on relance le
+// compte à rebours. Un seul appel à Claude est fait avec tous les messages du
+// lot regroupés en un seul "tour", une fois le silence atteint — avec un
+// plafond dur pour ne jamais faire attendre indéfiniment un fan qui écrit en
+// continu. Chaque message brut reste journalisé immédiatement à sa réception
+// (le fil du dashboard reste temps réel) — seul le déclenchement de l'appel
+// IA est retardé et regroupé.
+const pendingBatches = new Map(); // fanKey -> { fan, from, chatId, history, texts, firstAt, timer }
+const BATCH_DEBOUNCE_MS = 4000;
+const BATCH_MAX_WAIT_MS = 15000;
+
+async function enqueueFanMessage(fanKey, msg) {
+  let batch = pendingBatches.get(fanKey);
+  if (!batch) {
+    // Fan + historique capturés une seule fois, au premier message du lot —
+    // pour que l'appel groupé voie exactement le même contexte qu'un appel
+    // normal (l'historique ne doit pas inclure les messages de ce lot, qui
+    // seront fournis groupés comme "fanMessage" au moment du traitement).
+    const fan = await getOrCreateFan({
+      telegram_user_id: msg.from.id,
+      telegram_username: msg.from.username,
+      first_name: msg.from.first_name,
+    });
+    const history = await getRecentHistory(fan.id, 20);
+    batch = { fan, from: msg.from, chatId: msg.chat.id, history, texts: [], firstAt: Date.now(), timer: null };
+    pendingBatches.set(fanKey, batch);
+  }
+
+  await logMessage(batch.fan.id, 'fan', msg.text);
+  batch.texts.push(msg.text);
+
+  if (batch.timer) clearTimeout(batch.timer);
+  const elapsed = Date.now() - batch.firstAt;
+  const wait = Math.max(0, Math.min(BATCH_DEBOUNCE_MS, BATCH_MAX_WAIT_MS - elapsed));
+  batch.timer = setTimeout(() => {
+    pendingBatches.delete(fanKey);
+    runSerializedForFan(fanKey, () =>
+      handleIncomingMessage(
+        { chat: { id: batch.chatId }, from: batch.from, text: batch.texts.join('\n') },
+        { skipLogging: true, historyOverride: batch.history }
+      )
+    ).catch((err) => console.error('Erreur traitement lot de messages fan:', err));
+  }, wait);
+}
+
 // ---------- Webhook Telegram ----------
 app.post('/telegram/webhook', async (req, res) => {
   res.sendStatus(200); // répondre vite, traiter ensuite
@@ -161,15 +263,29 @@ app.post('/telegram/webhook', async (req, res) => {
       return;
     }
     const msg = update.message;
-    if (!msg || !msg.text) return;
+    if (!msg || !msg.from) return;
     const fanKey = (msg.from && msg.from.id) || msg.chat.id;
-    await runSerializedForFan(fanKey, () => handleIncomingMessage(msg));
+
+    if (msg.text) {
+      if (msg.text.startsWith('/start')) {
+        await runSerializedForFan(fanKey, () => handleIncomingMessage(msg));
+        return;
+      }
+      await enqueueFanMessage(fanKey, msg);
+      return;
+    }
+
+    const mediaType = detectMediaType(msg);
+    if (mediaType) {
+      await runSerializedForFan(fanKey, () => handleNonTextMessage(msg, mediaType));
+    }
   } catch (err) {
     console.error('Erreur traitement message Telegram:', err);
   }
 });
 
-async function handleIncomingMessage(msg) {
+async function handleIncomingMessage(msg, opts = {}) {
+  const { skipLogging = false, historyOverride = null } = opts;
   try {
     const chatId = msg.chat.id;
     const settings = await getSettings();
@@ -198,7 +314,11 @@ async function handleIncomingMessage(msg) {
       first_name: msg.from.first_name,
     });
 
-    await logMessage(fan.id, 'fan', msg.text);
+    // `skipLogging` : ce message a déjà été journalisé au moment de sa
+    // réception par enqueueFanMessage (voir plus haut) — ne pas le dupliquer.
+    if (!skipLogging) {
+      await logMessage(fan.id, 'fan', msg.text);
+    }
 
     // ---------- Pause par conversation ----------
     // Si l'admin (ou le filtre de sécurité ci-dessous, lors d'un incident
@@ -212,7 +332,10 @@ async function handleIncomingMessage(msg) {
     }
 
     const catalog = await getActiveCatalog();
-    const history = await getRecentHistory(fan.id, 20);
+    // `historyOverride` : lot de messages regroupés (voir enqueueFanMessage) —
+    // l'historique a déjà été capturé avant ce lot pour éviter de le
+    // dupliquer avec le contenu de "fanMessage" ci-dessous.
+    const history = historyOverride || (await getRecentHistory(fan.id, 20));
     const purchasedItemIds = await getPurchasedItemIds(fan.id);
     const vaultSummary = await getVaultSummary();
 
