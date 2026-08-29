@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 80 * 1024 * 1024 } });
 
 const {
   getSettings,
@@ -11,6 +13,9 @@ const {
   logMessage,
   getRecentHistory,
   recordSale,
+  recordManualSale,
+  listSales,
+  confirmSale,
   getPurchasedItemIds,
   setFanStatus,
   setFanPaused,
@@ -29,12 +34,22 @@ const {
   markReengaged,
   logSafetyIncident,
   listSafetyIncidents,
+  listVaultAssets,
+  addVaultAsset,
+  deleteVaultAsset,
+  getVaultSummary,
   supabase,
 } = require('./lib/supabase');
-const { runAgentTurn } = require('./lib/claudeAgent');
+const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
 const { sendMessage, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
-const { reviewOutgoingText, reviewOfferInput, FALLBACK_MESSAGE } = require('./lib/safetyFilter');
+const {
+  reviewOutgoingText,
+  reviewOfferInput,
+  FALLBACK_MESSAGE,
+  PAYMENT_ALT_FALLBACK_MESSAGE,
+  isPaymentAlternativeOnly,
+} = require('./lib/safetyFilter');
 
 const app = express();
 app.use(express.json());
@@ -196,6 +211,7 @@ async function handleIncomingMessage(msg) {
     const catalog = await getActiveCatalog();
     const history = await getRecentHistory(fan.id, 20);
     const purchasedItemIds = await getPurchasedItemIds(fan.id);
+    const vaultSummary = await getVaultSummary();
 
     const { text, toolCalls } = await runAgentTurn({
       settings,
@@ -204,6 +220,7 @@ async function handleIncomingMessage(msg) {
       fanMessage: msg.text,
       fan,
       purchasedItemIds,
+      vaultSummary,
     });
 
     // ---------- Filtre de sécurité serveur (voir lib/safetyFilter.js) ----------
@@ -219,10 +236,19 @@ async function handleIncomingMessage(msg) {
       console.error(`⚠️ Filtre de sécurité (texte) déclenché pour fan ${fan.id}:`, textReview.reasons, '| texte bloqué:', text);
       await logSafetyIncident({ fan_id: fan.id, reasons: textReview.reasons, flagged_text: text });
       await setFanPaused(fan.id, true);
-      await replyToFan({ settings, chatId, fan, text: FALLBACK_MESSAGE });
+
+      // Cas particulier : le fan demande juste un moyen de paiement alternatif
+      // (Yape, Nequi, etc.) — ce n'est pas un incident grave comme du contenu
+      // inventé, c'est une piste de vente à vérifier manuellement. On envoie un
+      // message de repli plus adapté et une alerte moins alarmiste — voir le
+      // circuit de paiement alternatif documenté dans le projet.
+      const isPaymentAlt = isPaymentAlternativeOnly(textReview.reasons);
+      await replyToFan({ settings, chatId, fan, text: isPaymentAlt ? PAYMENT_ALT_FALLBACK_MESSAGE : FALLBACK_MESSAGE });
       await maybeAlertAdmin(
         settings,
-        `🚨 Alerte sécurité: réponse bloquée pour ${fan.telegram_username || fan.first_name || fan.telegram_user_id}\nRaisons: ${textReview.reasons.join('; ')}\nLa conversation a été mise en PAUSE automatiquement — va voir le dashboard pour reprendre la main.`
+        isPaymentAlt
+          ? `💳 ${fan.telegram_username || fan.first_name || fan.telegram_user_id} demande un moyen de paiement alternatif (Yape/Nequi/autre) — conversation mise en PAUSE, vérifie et confirme manuellement depuis le dashboard si le paiement arrive vraiment.`
+          : `🚨 Alerte sécurité: réponse bloquée pour ${fan.telegram_username || fan.first_name || fan.telegram_user_id}\nRaisons: ${textReview.reasons.join('; ')}\nLa conversation a été mise en PAUSE automatiquement — va voir le dashboard pour reprendre la main.`
       );
       return;
     }
@@ -460,6 +486,7 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
     const { message, history } = req.body; // history: [{role:'fan'|'assistant', content}]
     const settings = await getSettings();
     const catalog = await getActiveCatalog();
+    const vaultSummary = await getVaultSummary();
     const fakeFan = { id: 'test', last_active_at: new Date().toISOString(), memory_notes: '' };
     const { text, toolCalls } = await runAgentTurn({
       settings,
@@ -467,6 +494,7 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
       history: history || [],
       fanMessage: message,
       fan: fakeFan,
+      vaultSummary,
     });
     const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
 
@@ -525,6 +553,117 @@ app.get('/api/admin/analytics/timeseries', requireAdminToken, async (req, res) =
   }
 });
 
+// ---------- API Admin: ventes (distinguer "envoyé" vs "payé confirmé") ----------
+// Rappel : sans webhook Dropp.fans, rien ne confirme automatiquement qu'un
+// paiement a vraiment eu lieu. Ces routes servent à ce que Bryan/Meely le
+// constatent eux-mêmes (wallet Dropp, ou preuve Yape/Nequi) et le déclarent.
+app.get('/api/admin/sales', requireAdminToken, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    res.json(await listSales(limit));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/sales/:id/confirm', requireAdminToken, async (req, res) => {
+  try {
+    const updated = await confirmSale(req.params.id, { payment_method: req.body.payment_method });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enregistre une vente qui n'est jamais passée par "send_offer" (ex: paiement
+// Yape/Nequi vérifié à la main par l'admin) — crée directement une ligne déjà
+// marquée "payée" et met à jour le total dépensé du fan.
+app.post('/api/admin/sales/manual', requireAdminToken, async (req, res) => {
+  try {
+    const { fan_id, catalog_item_id, price, payment_method } = req.body;
+    if (!fan_id || !price) return res.status(400).json({ error: 'fan_id et price sont obligatoires' });
+    const updatedFan = await recordManualSale({ fan_id, catalog_item_id: catalog_item_id || null, price, payment_method });
+    res.json({ ok: true, fan: updatedFan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: coffre de contenu (organisation par catégorie) ----------
+// Les fichiers réels sont stockés dans Supabase Storage (bucket privé
+// "content-vault"), jamais exposés publiquement — seul ce serveur (clé
+// service_role) y accède. L'IA ne reçoit jamais ces fichiers, seulement un
+// résumé par catégorie (voir getVaultSummary / lib/claudeAgent.js).
+app.get('/api/admin/vault', requireAdminToken, async (req, res) => {
+  try {
+    const assets = await listVaultAssets();
+    const withUrls = await Promise.all(
+      assets.map(async (a) => {
+        const { data } = await supabase.storage.from('content-vault').createSignedUrl(a.storage_path, 3600);
+        return { ...a, url: data?.signedUrl || null };
+      })
+    );
+    res.json(withUrls);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/vault/upload', requireAdminToken, upload.array('files', 20), async (req, res) => {
+  try {
+    const { category, catalog_item_id } = req.body;
+    if (!category) return res.status(400).json({ error: 'category manquante' });
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'aucun fichier reçu' });
+
+    const saved = [];
+    for (const file of req.files) {
+      const ext = (file.originalname.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+      const storagePath = `${category}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('content-vault')
+        .upload(storagePath, file.buffer, { contentType: file.mimetype });
+      if (uploadErr) throw uploadErr;
+      const media_type = file.mimetype.startsWith('video/') ? 'video' : 'photo';
+      saved.push(await addVaultAsset({ category, media_type, storage_path: storagePath, catalog_item_id: catalog_item_id || null }));
+    }
+    res.json({ ok: true, uploaded: saved.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/vault/:id', requireAdminToken, async (req, res) => {
+  try {
+    await deleteVaultAsset(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: aperçu du prompt système actuel (débogage/transparence) ----------
+app.get('/api/admin/system-prompt-preview', requireAdminToken, async (req, res) => {
+  try {
+    const settings = await getSettings();
+    const catalog = await getActiveCatalog();
+    const vaultSummary = await getVaultSummary();
+    const fakeFan = {
+      id: 'preview',
+      last_active_at: new Date().toISOString(),
+      memory_notes: '(exemple) Le gusta hablar de fitness, prefiere que le digan "bebé".',
+      potential: 'potencial',
+      budget_notes: '',
+      interests_notes: '',
+      objections_notes: '',
+      red_flags_notes: '',
+    };
+    const prompt = buildSystemPrompt({ settings, catalog, fan: fakeFan, purchasedItemIds: [], vaultSummary });
+    res.json({ prompt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: export CSV ----------
 app.get('/api/admin/export/fans.csv', requireAdminToken, async (req, res) => {
   const { data } = await supabase.from('fans').select('*').order('created_at');
@@ -543,11 +682,11 @@ app.get('/api/admin/export/fans.csv', requireAdminToken, async (req, res) => {
 
 app.get('/api/admin/export/sales.csv', requireAdminToken, async (req, res) => {
   const { data } = await supabase.from('sales').select('*, fans(telegram_username, first_name)').order('created_at');
-  const rows = ['id,fan,price,status,dropfans_link,created_at'];
+  const rows = ['id,fan,price,status,payment_method,dropfans_link,created_at'];
   (data || []).forEach((s) => {
     const fanLabel = s.fans?.telegram_username || s.fans?.first_name || s.fan_id;
     rows.push(
-      [s.id, fanLabel, s.price, s.status, s.dropfans_link, s.created_at]
+      [s.id, fanLabel, s.price, s.status, s.payment_method, s.dropfans_link, s.created_at]
         .map((v) => `"${(v ?? '').toString().replace(/"/g, '""')}"`)
         .join(',')
     );

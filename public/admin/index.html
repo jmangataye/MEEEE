@@ -142,6 +142,29 @@
   .catalog-card .desc{color:var(--muted);font-size:.82rem;min-height:32px}
   .catalog-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 
+  /* ---------- coffre de contenu ---------- */
+  .vault-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+  .vault-card{background:var(--surface-2);border:2px dashed var(--border);border-radius:var(--radius);padding:16px;
+      display:flex;flex-direction:column;gap:8px;transition:border-color .15s,background .15s}
+  .vault-card:hover{border-color:var(--accent);background:var(--surface-hover)}
+  .vault-card .vault-icon{font-size:1.6rem;line-height:1}
+  .vault-card .vault-title{font-weight:700;font-size:.9rem}
+  .vault-card .vault-count{font-size:.72rem;color:var(--muted)}
+  .vault-card input[type="file"]{font-size:.72rem;padding:6px;background:var(--bg-soft)}
+  .vault-card select{font-size:.78rem;padding:6px 8px}
+  .vault-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+  .vault-thumb{position:relative;border-radius:var(--radius-sm);overflow:hidden;background:var(--surface-2);
+      border:1px solid var(--border);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+  .vault-thumb img{width:100%;height:100%;object-fit:cover}
+  .vault-thumb .vault-video-badge{font-size:1.6rem}
+  .vault-thumb .vault-cat-label{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;
+      font-size:.62rem;padding:3px 5px;text-align:center}
+  .vault-thumb .vault-del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;
+      border-radius:6px;width:20px;height:20px;font-size:.72rem;cursor:pointer;line-height:1}
+
+  .prompt-preview{margin-top:10px;background:var(--bg-soft);border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:14px;font-size:.74rem;line-height:1.5;white-space:pre-wrap;max-height:420px;overflow-y:auto;color:var(--muted)}
+
   /* ---------- token gate ---------- */
   .gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
   .gate-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border);
@@ -239,6 +262,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="13" rx="3"/><path d="M8 21l3.2-3.5"/></svg>
         En direct
       </button>
+      <button class="nav-btn" data-tab="sales" onclick="showTab('sales')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 14.5h4"/></svg>
+        Ventes
+      </button>
       <button class="nav-btn" data-tab="catalog" onclick="showTab('catalog')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>
         Catalogue
@@ -322,6 +349,32 @@
       </div>
     </div>
 
+    <!-- VENTES -->
+    <div class="tab-content" id="tab-sales" style="display:none">
+      <div class="page-head"><h2>Ventes</h2><p>"Envoyé" = un lien de paiement a été généré. "Payé" = toi ou Meely avez vérifié que l'argent est bien arrivé (wallet Dropp.fans, ou preuve Yape/Nequi). Rien ne le fait automatiquement.</p></div>
+      <div class="panel">
+        <h3>Enregistrer un paiement reçu autrement (Yape, Nequi, en main propre...)</h3>
+        <p class="muted" style="margin-top:-6px">À utiliser quand un fan a payé par un moyen alternatif vérifié, sans passer par le lien Dropp.fans habituel.</p>
+        <div class="row">
+          <div><label>Fan</label><select id="manual_sale_fan"></select></div>
+          <div><label>Article (optionnel)</label><select id="manual_sale_item"><option value="">— aucun —</option></select></div>
+          <div><label>Prix reçu</label><input id="manual_sale_price" type="number" step="0.01" /></div>
+          <div><label>Moyen de paiement</label>
+            <select id="manual_sale_method">
+              <option value="yape">Yape</option>
+              <option value="nequi">Nequi</option>
+              <option value="efectivo">En main propre</option>
+              <option value="autre">Autre</option>
+            </select>
+          </div>
+          <div style="flex:0"><button class="btn btn-primary" onclick="addManualSale()">Enregistrer comme payé</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <table id="salesTable"><thead><tr><th>Fan</th><th>Article</th><th>Prix</th><th>Moyen</th><th>Statut</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
     <!-- CATALOGUE -->
     <div class="tab-content" id="tab-catalog" style="display:none">
       <div class="page-head"><h2>Catalogue</h2><p>Les articles que Léa peut proposer aux fans.</p></div>
@@ -361,16 +414,71 @@
         </div>
         <label>Ton</label>
         <textarea id="tone"></textarea>
+        <button class="btn btn-ghost btn-sm" onclick="showPromptPreview()" style="margin-top:8px">👁 Voir le prompt système actuel envoyé à l'IA</button>
+        <pre id="promptPreview" class="prompt-preview" style="display:none"></pre>
       </div>
 
       <div class="panel">
-        <h3>Messages &amp; script</h3>
+        <h3>Style d'écriture</h3>
+        <p class="muted" style="margin-top:-6px">Presets rapides (remplissent les champs ci-dessous, à ajuster ensuite) :</p>
+        <div class="row">
+          <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="applyTonePreset('douce')">💗 Douce et romantique</button></div>
+          <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="applyTonePreset('coquine')">😉 Coquine et joueuse</button></div>
+          <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="applyTonePreset('directa')">🔥 Directe et dominante</button></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Expressions/mots à utiliser souvent (sa "signature")</label><input id="preferred_expressions" placeholder="ej: bebé, que rico, uy" /></div>
+          <div><label>Mots interdits</label><input id="banned_words" placeholder="mots à ne jamais utiliser" /></div>
+        </div>
+        <div class="row">
+          <div><label>Fréquence des emojis</label>
+            <select id="emoji_frequency">
+              <option value="ninguno">Aucun</option>
+              <option value="raro">Rare</option>
+              <option value="moderado" selected>Modéré</option>
+              <option value="frecuente">Fréquent</option>
+            </select>
+          </div>
+          <div><label>Emojis autorisés (optionnel)</label><input id="allowed_emojis" placeholder="ej: 😉 😊 🔥" /></div>
+          <div><label>Intensité modismes colombiens</label>
+            <select id="slang_intensity">
+              <option value="bajo">Faible</option>
+              <option value="medio" selected>Moyenne</option>
+              <option value="alto">Élevée</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Messages &amp; script — 1. Accroche</h3>
         <label>Message d'accueil — variante A (variables: {persona_name}, {creator_name})</label>
         <textarea id="intro_message"></textarea>
         <label>Message d'accueil — variante B (optionnel, pour test A/B)</label>
         <textarea id="intro_message_b"></textarea>
-        <label>Script / réponses aux objections (guide l'IA, elle s'en inspire fidèlement)</label>
-        <textarea id="playbook" style="min-height:120px"></textarea>
+      </div>
+
+      <div class="panel">
+        <h3>Script par étapes de vente</h3>
+        <p class="muted" style="margin-top:-6px">Chaque étape est optionnelle — laisse vide celles que tu ne veux pas scripter, l'IA improvisera avec le ton général.</p>
+        <label>2. Qualification (comprendre ce que cherche le fan avant de vendre)</label>
+        <textarea id="script_qualification"></textarea>
+        <label>3. Montée en désir / tease (sans contenu gratuit ni description explicite)</label>
+        <textarea id="script_tease"></textarea>
+        <label>4. Objections (déjà existant — guide l'IA face aux hésitations)</label>
+        <textarea id="playbook" style="min-height:100px"></textarea>
+        <label>5. Closing (quand le fan est d'accord sur article + prix)</label>
+        <textarea id="script_closing"></textarea>
+        <label>6. Upsell (plus tard dans la conversation, jamais juste après une vente)</label>
+        <textarea id="script_upsell"></textarea>
+      </div>
+
+      <div class="panel">
+        <h3>Contenu par catégorie</h3>
+        <p class="muted" style="margin-top:-6px">Dépose ici tes photos/vidéos organisées par catégorie. Les fichiers restent privés (jamais publics) — l'IA ne les voit jamais, elle sait juste ce qui existe dans chaque catégorie pour orienter un fan qui demande un type de contenu précis, sans jamais rien inventer ni décrire.</p>
+        <div class="vault-grid" id="vaultGrid"></div>
+        <h4 style="margin:22px 0 10px;font-size:.9rem;color:var(--muted)">Fichiers déposés</h4>
+        <div class="vault-gallery" id="vaultGallery"></div>
       </div>
 
       <div class="panel">
@@ -484,8 +592,11 @@ function showTab(name){
   if (name === 'live') {
     loadFans(); loadSafetyIncidents();
     if (!liveTimer) liveTimer = setInterval(() => { loadFans(); loadSafetyIncidents(); }, 5000);
+  } else if (liveTimer) {
+    clearInterval(liveTimer); liveTimer = null;
   }
-  else if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (name === 'sales') loadSales();
+  if (name === 'persona') loadVault();
 }
 
 async function boot(){
@@ -551,8 +662,8 @@ async function loadStats(){
       <div class="stat-value">${fmtMoney(s.revenue)}</div><div class="stat-label">Liens envoyés (revenu estimé)</div>
     </div>
     <div class="stat-card">
-      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>','rgba(45,212,191,.15)','#2dd4bf')}</div>
-      <div class="stat-value">${s.salesCount||0}</div><div class="stat-label">Liens envoyés</div>
+      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 9.5 17.5 4 12"/></svg>','rgba(52,211,153,.15)','var(--green)')}</div>
+      <div class="stat-value">${fmtMoney(s.paidRevenue)}</div><div class="stat-label">Payé confirmé (${s.paidSalesCount||0} ventes)</div>
     </div>
     <div class="stat-card">
       <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3.5z"/></svg>','rgba(244,183,64,.16)','var(--accent)')}</div>
@@ -572,6 +683,8 @@ async function loadStats(){
 async function loadSettings(){
   const s = await api('/api/admin/settings');
   const fields = ['creator_name','persona_name','language','tone','intro_message','intro_message_b','playbook',
+    'script_qualification','script_tease','script_closing','script_upsell',
+    'preferred_expressions','banned_words','emoji_frequency','allowed_emojis','slang_intensity',
     'min_custom_price','max_negotiation_discount_pct','telegram_bot_username','currency_symbol','response_delay_min_seconds',
     'response_delay_max_seconds','vip_threshold','alert_min_sale','admin_telegram_chat_id','reengagement_hours','reengagement_message'];
   fields.forEach(f => { const el = document.getElementById(f); if (el) el.value = s[f] ?? ''; });
@@ -582,6 +695,8 @@ async function loadSettings(){
 
 async function saveSettings(){
   const fields = ['creator_name','persona_name','language','tone','intro_message','intro_message_b','playbook',
+    'script_qualification','script_tease','script_closing','script_upsell',
+    'preferred_expressions','banned_words','emoji_frequency','allowed_emojis','slang_intensity',
     'telegram_bot_username','currency_symbol','admin_telegram_chat_id','reengagement_message'];
   const numFields = ['min_custom_price','max_negotiation_discount_pct','response_delay_min_seconds',
     'response_delay_max_seconds','vip_threshold','alert_min_sale','reengagement_hours'];
@@ -590,6 +705,158 @@ async function saveSettings(){
   numFields.forEach(f => payload[f] = parseFloat(document.getElementById(f).value));
   await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(payload) });
   alert('Réglages enregistrés ✅');
+}
+
+const TONE_PRESETS = {
+  douce: {
+    tone: 'Dulce, romántica y detallista — habla con ternura, se interesa genuinamente por el fan, crea intimidad emocional antes que nada.',
+    preferred_expressions: 'mi amor, que lindo, me encanta eso',
+    emoji_frequency: 'moderado',
+    slang_intensity: 'bajo',
+  },
+  coquine: {
+    tone: 'Coqueta, juguetona y traviesa — mucho doble sentido ligero, risas, complicidad, sin ser vulgar ni explícita.',
+    preferred_expressions: 'uy pilas, que rico, jajaja me matas',
+    emoji_frequency: 'frecuente',
+    slang_intensity: 'medio',
+  },
+  directa: {
+    tone: 'Directa, segura de si misma y algo dominante — va al grano, propone con confianza, poca duda en el tono.',
+    preferred_expressions: 'mira, te cuento, dale entonces',
+    emoji_frequency: 'raro',
+    slang_intensity: 'medio',
+  },
+};
+
+function applyTonePreset(name){
+  const p = TONE_PRESETS[name];
+  if (!p) return;
+  Object.entries(p).forEach(([field, value]) => {
+    const el = document.getElementById(field);
+    if (el) el.value = value;
+  });
+}
+
+async function showPromptPreview(){
+  const el = document.getElementById('promptPreview');
+  if (el.style.display === 'block') { el.style.display = 'none'; return; }
+  el.textContent = 'Chargement...';
+  el.style.display = 'block';
+  const res = await api('/api/admin/system-prompt-preview');
+  el.textContent = res.prompt || res.error || '(vide)';
+}
+
+// ---- Coffre de contenu ----
+const VAULT_CATEGORIES = [
+  { key: 'senos', icon: '💕', label: 'Seins' },
+  { key: 'trasero', icon: '🍑', label: 'Fessier' },
+  { key: 'pies', icon: '🦶', label: 'Pieds' },
+  { key: 'cuerpo_completo', icon: '🧍‍♀️', label: 'Corps entier' },
+  { key: 'rostro', icon: '😊', label: 'Visage' },
+  { key: 'otro', icon: '➕', label: 'Autre' },
+];
+let vaultCache = [];
+
+async function loadVault(){
+  vaultCache = await api('/api/admin/vault');
+  renderVaultGrid();
+  renderVaultGallery();
+}
+
+function renderVaultGrid(){
+  document.getElementById('vaultGrid').innerHTML = VAULT_CATEGORIES.map(c => {
+    const items = vaultCache.filter(v => v.category === c.key);
+    const photos = items.filter(v => v.media_type === 'photo').length;
+    const videos = items.filter(v => v.media_type === 'video').length;
+    return `
+      <div class="vault-card">
+        <div class="vault-icon">${c.icon}</div>
+        <div class="vault-title">${c.label}</div>
+        <div class="vault-count">${photos} photo(s), ${videos} vidéo(s)</div>
+        <select id="vault_link_${c.key}">
+          <option value="">Lier à un article (optionnel)</option>
+          ${catalogCache.map(it => `<option value="${it.id}">${it.name}</option>`).join('')}
+        </select>
+        <input type="file" id="vault_files_${c.key}" multiple accept="image/*,video/*" />
+        <button class="btn btn-primary btn-sm" onclick="uploadVaultFiles('${c.key}')">Déposer ici</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderVaultGallery(){
+  document.getElementById('vaultGallery').innerHTML = vaultCache.map(v => {
+    const cat = VAULT_CATEGORIES.find(c => c.key === v.category);
+    const inner = v.media_type === 'photo' && v.url
+      ? `<img src="${v.url}" loading="lazy" />`
+      : `<span class="vault-video-badge">🎬</span>`;
+    return `
+      <div class="vault-thumb">
+        ${inner}
+        <button class="vault-del" onclick="deleteVaultFile('${v.id}')" title="Supprimer">✕</button>
+        <div class="vault-cat-label">${cat ? cat.icon+' '+cat.label : v.category}</div>
+      </div>
+    `;
+  }).join('') || '<p class="muted">Aucun fichier déposé pour l\'instant.</p>';
+}
+
+async function uploadVaultFiles(category){
+  const fileInput = document.getElementById('vault_files_'+category);
+  const files = fileInput.files;
+  if (!files || !files.length) { alert('Choisis au moins un fichier.'); return; }
+  const catalog_item_id = document.getElementById('vault_link_'+category).value;
+  const formData = new FormData();
+  formData.append('category', category);
+  if (catalog_item_id) formData.append('catalog_item_id', catalog_item_id);
+  Array.from(files).forEach(f => formData.append('files', f));
+  const res = await fetch('/api/admin/vault/upload', { method:'POST', headers:{ 'X-Admin-Token': TOKEN }, body: formData });
+  if (!res.ok) { alert('Erreur pendant l\'envoi.'); return; }
+  fileInput.value = '';
+  loadVault();
+}
+
+async function deleteVaultFile(id){
+  if (!confirm('Supprimer ce fichier définitivement ?')) return;
+  await api('/api/admin/vault/'+id, { method:'DELETE' });
+  loadVault();
+}
+
+// ---- Ventes ----
+async function loadSales(){
+  const [sales, fans] = await Promise.all([api('/api/admin/sales'), api('/api/admin/fans?limit=200')]);
+  const fanSelect = document.getElementById('manual_sale_fan');
+  fanSelect.innerHTML = fans.map(f => `<option value="${f.id}">${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</option>`).join('');
+  const itemSelect = document.getElementById('manual_sale_item');
+  itemSelect.innerHTML = '<option value="">— aucun —</option>' + catalogCache.map(it => `<option value="${it.id}">${it.name} (${fmtMoney(it.price)})</option>`).join('');
+
+  document.querySelector('#salesTable tbody').innerHTML = (sales || []).map(s => {
+    const fanLabel = s.fans?.telegram_username ? '@'+s.fans.telegram_username : (s.fans?.first_name || s.fan_id);
+    const itemLabel = s.catalog_items?.name || '—';
+    const statusPill = s.status === 'paid'
+      ? '<span class="pill" style="background:rgba(52,211,153,.15);color:var(--green)">✅ Payé</span>'
+      : '<span class="pill pill-new">Envoyé</span>';
+    return `<tr>
+      <td>${fanLabel}</td><td>${itemLabel}</td><td>${fmtMoney(s.price)}</td><td>${s.payment_method||'dropfans'}</td>
+      <td>${statusPill}</td><td>${new Date(s.created_at).toLocaleString()}</td>
+      <td>${s.status !== 'paid' ? `<button class="btn btn-primary btn-sm" onclick="confirmSaleRow('${s.id}')">Confirmer payé</button>` : ''}</td>
+    </tr>`;
+  }).join('') || "<tr><td colspan=\"7\" class=\"muted\">Aucune vente pour l'instant</td></tr>";
+}
+
+async function confirmSaleRow(id){
+  await api('/api/admin/sales/'+id+'/confirm', { method:'PUT', body: JSON.stringify({}) });
+  loadSales();
+}
+
+async function addManualSale(){
+  const fan_id = document.getElementById('manual_sale_fan').value;
+  const catalog_item_id = document.getElementById('manual_sale_item').value || null;
+  const price = parseFloat(document.getElementById('manual_sale_price').value);
+  const payment_method = document.getElementById('manual_sale_method').value;
+  if (!fan_id || !price) { alert('Choisis un fan et un prix.'); return; }
+  await api('/api/admin/sales/manual', { method:'POST', body: JSON.stringify({ fan_id, catalog_item_id, price, payment_method }) });
+  document.getElementById('manual_sale_price').value = '';
+  loadSales();
 }
 
 let catalogCache = [];
@@ -612,6 +879,7 @@ function renderCatalog(){
         <div>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien ↗</a>' : '<span class="chip-warn">'+ICON_WARN+' pas de lien Dropp.fans</span>'}</div>
         <div class="catalog-actions">
           <button class="btn btn-ghost btn-sm" onclick="startEdit('${it.id}')">${ICON_EDIT} Modifier</button>
+          <button class="btn btn-ghost btn-sm" onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
           <button class="btn btn-ghost btn-sm" onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
           <button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
         </div>
@@ -663,6 +931,16 @@ async function saveEdit(id){
     price: parseFloat(document.getElementById('edit_price_'+id).value),
     is_negotiable: document.getElementById('edit_negotiable_'+id).value === 'true',
     dropfans_link: document.getElementById('edit_link_'+id).value || null,
+  })});
+  loadCatalog();
+}
+
+async function duplicateItem(id){
+  const it = catalogCache.find(x => x.id === id);
+  if (!it) return;
+  await api('/api/admin/catalog', { method:'POST', body: JSON.stringify({
+    name: it.name + ' (copie)', tier: it.tier, price: it.price, is_negotiable: it.is_negotiable,
+    description: it.description, dropfans_link: null, active: false, sort_order: 99,
   })});
   loadCatalog();
 }
