@@ -14,6 +14,7 @@ const {
   getPurchasedItemIds,
   setFanStatus,
   setFanPaused,
+  updateFanProfile,
   markVipAlerted,
   listFansWithPreview,
   getFanById,
@@ -319,7 +320,17 @@ async function handleIncomingMessage(msg) {
         await setFanStatus(fan.id, call.input.status);
       }
       if (call.name === 'remember_about_fan') {
-        await supabase.from('fans').update({ memory_notes: call.input.notes }).eq('id', fan.id);
+        // Seuls les champs réellement fournis par le modèle sont mis à jour —
+        // "notes" (général) est toujours réécrit en entier, les champs
+        // structurés (potentiel, budget, intérêts, objections, alertes) ne
+        // changent que si le modèle a détecté une nouveauté sur ce point-là.
+        const patch = { memory_notes: call.input.notes };
+        if (call.input.potential) patch.potential = call.input.potential;
+        if (call.input.budget_notes) patch.budget_notes = call.input.budget_notes;
+        if (call.input.interests_notes) patch.interests_notes = call.input.interests_notes;
+        if (call.input.objections_notes) patch.objections_notes = call.input.objections_notes;
+        if (call.input.red_flags_notes) patch.red_flags_notes = call.input.red_flags_notes;
+        await updateFanProfile(fan.id, patch);
       }
     }
   } catch (err) {

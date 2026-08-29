@@ -164,7 +164,12 @@
   .fan-item .preview{font-size:.76rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 
   .thread-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
-  .thread-header{padding:14px 18px;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:10px}
+  .thread-header{padding:14px 18px;border-bottom:1px solid var(--border-soft);display:flex;flex-direction:column;gap:10px}
+  .profile-panel{display:flex;flex-direction:column;gap:5px}
+  .profile-row{font-size:.78rem;color:var(--muted);line-height:1.4}
+  .profile-row.danger{color:var(--red)}
+  .profile-label{font-weight:700;color:var(--text);margin-right:6px}
+  .profile-row.danger .profile-label{color:var(--red)}
   .thread{padding:16px 18px;max-height:calc(100vh - 270px);overflow-y:auto;display:flex;flex-direction:column;gap:9px}
   .composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border-soft);background:var(--surface-2)}
   .composer input{flex:1}
@@ -695,6 +700,23 @@ function initials(f){
   return src.slice(0,2).toUpperCase();
 }
 
+function potentialIcon(potential){
+  if (potential === 'potencial') return '🔥 ';
+  if (potential === 'sin_potencial') return '❄️ ';
+  return '';
+}
+
+function potentialBadge(potential){
+  if (potential === 'potencial') return '<span class="pill" style="background:rgba(52,211,153,.15);color:var(--green)">🔥 Potentiel</span>';
+  if (potential === 'sin_potencial') return '<span class="pill" style="background:rgba(96,165,250,.12);color:var(--muted)">❄️ Pas potentiel</span>';
+  return '<span class="pill" style="background:rgba(139,147,167,.12);color:var(--muted)">— Pas encore évalué</span>';
+}
+
+function profileBlock(label, value, danger){
+  if (!value) return '';
+  return `<div class="profile-row${danger?' danger':''}"><span class="profile-label">${label}</span>${value}</div>`;
+}
+
 async function loadFans(){
   const fans = await api('/api/admin/fans');
   document.getElementById('fanList').innerHTML = fans.map(f => `
@@ -702,7 +724,7 @@ async function loadFans(){
       <div class="avatar" style="box-shadow:0 0 0 2px ${f.paused ? 'var(--red)' : (STATUS_COLORS[f.status]||STATUS_COLORS.new)}">${initials(f)}</div>
       <div class="meta">
         <div class="name-row">
-          <span class="name">${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
+          <span class="name">${potentialIcon(f.potential)}${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
           ${f.paused ? '<span class="pill pill-off">⏸ pausé</span>' : `<span class="pill pill-${f.status}">${f.status}</span>`}
         </div>
         <div class="preview">${f.last_message ? (f.last_message.role==='fan'?'':'→ ') + f.last_message.content : ''}</div>
@@ -724,8 +746,20 @@ async function loadThread(id, silent){
   const f = data.fan;
   document.getElementById('fanHeader').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;flex-wrap:wrap">
-      <div><strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong> &nbsp;<span class="pill pill-${f.status}">${f.status}</span> &nbsp;${fmtMoney(f.total_spent)} envoyés ${f.memory_notes ? '<br><span class="muted">🧠 '+f.memory_notes+'</span>' : ''}</div>
+      <div>
+        <strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong>
+        &nbsp;<span class="pill pill-${f.status}">${f.status}</span>
+        &nbsp;${potentialBadge(f.potential)}
+        &nbsp;<span class="muted">${fmtMoney(f.total_spent)} envoyés</span>
+      </div>
       <button class="btn ${f.paused ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="togglePause('${f.id}', ${!f.paused})">${f.paused ? "▶️ Reprendre l'IA" : '⏸ Mettre en pause'}</button>
+    </div>
+    <div class="profile-panel">
+      ${profileBlock('🧠 Notes', f.memory_notes)}
+      ${profileBlock('💰 Budget', f.budget_notes)}
+      ${profileBlock('❤️ Intérêts', f.interests_notes)}
+      ${profileBlock('🤔 Objections', f.objections_notes)}
+      ${profileBlock('⚠️ Alerte', f.red_flags_notes, true)}
     </div>
   `;
   document.getElementById('thread').innerHTML = data.messages.map(m => `<div class="msg ${m.role==='fan'?'fan':'assistant'}">${m.content}</div>`).join('');
