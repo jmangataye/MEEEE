@@ -22,6 +22,7 @@ const {
   createAdminToken,
   deleteAdminToken,
   getAnalytics,
+  getDailyTimeseries,
   getFansForReengagement,
   markReengaged,
   supabase,
@@ -93,14 +94,60 @@ async function maybeAlertAdmin(settings, text) {
   }
 }
 
+// ---------- Anti-doublon : Telegram peut renvoyer la même mise à jour plusieurs
+// fois (retry) si notre service met trop de temps à répondre — typiquement
+// après une mise en veille du plan gratuit Render ("cold start"). Sans ce
+// garde-fou, un même message de fan peut être traité deux ou trois fois en
+// parallèle, ce qui produisait exactement le genre de réponses dupliquées /
+// incohérentes observées dans les conversations (même phrase envoyée deux
+// fois, prix différents donnés à la suite, etc).
+const processedUpdateIds = new Set();
+const MAX_PROCESSED_IDS = 5000;
+function alreadyProcessed(updateId) {
+  if (updateId === undefined || updateId === null) return false;
+  if (processedUpdateIds.has(updateId)) return true;
+  processedUpdateIds.add(updateId);
+  if (processedUpdateIds.size > MAX_PROCESSED_IDS) {
+    processedUpdateIds.delete(processedUpdateIds.values().next().value);
+  }
+  return false;
+}
+
+// ---------- Sérialisation par fan : si deux messages du même fan arrivent
+// coup sur coup (très fréquent — les gens envoient souvent 2-3 messages courts
+// à la suite), on les traite l'un après l'autre plutôt que de lancer deux
+// appels à Claude en parallèle qui ne se voient pas l'un l'autre et produisent
+// des réponses en double ou contradictoires.
+const fanQueues = new Map();
+function runSerializedForFan(fanKey, task) {
+  const previous = fanQueues.get(fanKey) || Promise.resolve();
+  const next = previous.then(task, task).finally(() => {
+    if (fanQueues.get(fanKey) === next) fanQueues.delete(fanKey);
+  });
+  fanQueues.set(fanKey, next);
+  return next;
+}
+
 // ---------- Webhook Telegram ----------
 app.post('/telegram/webhook', async (req, res) => {
   res.sendStatus(200); // répondre vite, traiter ensuite
   try {
     const update = req.body;
+    if (alreadyProcessed(update.update_id)) {
+      console.warn('Update Telegram déjà traité, ignoré:', update.update_id);
+      return;
+    }
     const msg = update.message;
     if (!msg || !msg.text) return;
+    const fanKey = (msg.from && msg.from.id) || msg.chat.id;
+    await runSerializedForFan(fanKey, () => handleIncomingMessage(msg));
+  } catch (err) {
+    console.error('Erreur traitement message Telegram:', err);
+  }
+});
 
+async function handleIncomingMessage(msg) {
+  try {
     const chatId = msg.chat.id;
     const settings = await getSettings();
 
@@ -205,9 +252,9 @@ app.post('/telegram/webhook', async (req, res) => {
       }
     }
   } catch (err) {
-    console.error('Erreur traitement message Telegram:', err);
+    console.error('Erreur traitement message fan:', err);
   }
-});
+}
 
 // ---------- Génération de lien traçable (depuis la landing page) ----------
 app.post('/api/tracking-link', async (req, res) => {
@@ -328,6 +375,15 @@ app.delete('/api/admin/admins/:id', requireAdminToken, async (req, res) => {
 // ---------- API Admin: analytics ----------
 app.get('/api/admin/analytics', requireAdminToken, async (req, res) => {
   res.json(await getAnalytics());
+});
+
+app.get('/api/admin/analytics/timeseries', requireAdminToken, async (req, res) => {
+  try {
+    const days = Math.min(Number(req.query.days) || 30, 90);
+    res.json(await getDailyTimeseries(days));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- API Admin: export CSV ----------

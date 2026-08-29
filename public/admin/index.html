@@ -4,113 +4,300 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Meeli — Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
-  :root{color-scheme:light dark;--bg:#0f1115;--card:#181b22;--border:#2a2e38;--text:#eef0f3;--muted:#9aa1ac;--accent:#e879a6;--accent2:#7c9cff;--ok:#4ade80;}
+  :root{
+    color-scheme: dark;
+    --bg:#0b0c10;
+    --bg-soft:#101218;
+    --surface:#161923;
+    --surface-2:#1c202c;
+    --surface-hover:#232838;
+    --border:#272c3a;
+    --border-soft:#1e222e;
+    --text:#f2f4f8;
+    --muted:#8b93a7;
+    --muted-2:#5f6779;
+    --accent:#f4b740;
+    --accent-dark:#c98f1e;
+    --accent-soft:rgba(244,183,64,.14);
+    --accent-2:#ff8a5c;
+    --violet:#a78bfa;
+    --blue:#60a5fa;
+    --teal:#2dd4bf;
+    --green:#34d399;
+    --red:#f87171;
+    --red-soft:rgba(248,113,113,.12);
+    --radius:14px;
+    --radius-sm:9px;
+    --shadow:0 8px 24px rgba(0,0,0,.35);
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  ::selection{background:var(--accent-soft)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--surface-2);border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- layout ---------- */
   .layout{display:flex;min-height:100vh}
-  nav{width:200px;flex:0 0 200px;background:var(--card);border-right:1px solid var(--border);padding:18px 12px;position:sticky;top:0;height:100vh}
-  nav h1{font-size:1.1rem;margin:4px 8px 20px}
-  nav button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--muted);padding:10px 10px;border-radius:8px;font-size:.88rem;cursor:pointer;margin-bottom:2px}
-  nav button.active{background:linear-gradient(135deg,rgba(232,121,166,.18),rgba(124,156,255,.18));color:var(--text);font-weight:600}
-  main{flex:1;padding:24px 32px;max-width:1100px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
-  .stat{font-size:1.7rem;font-weight:700}
-  .stat-label{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
-  section.panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
-  section.panel h2{margin-top:0;font-size:1.05rem}
-  label{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
-  input,textarea,select{width:100%;padding:8px 10px;background:#0f1115;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem;font-family:inherit}
-  textarea{min-height:60px}
-  button.btn{cursor:pointer;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:.85rem}
-  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
-  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-  .btn-danger{background:transparent;border:1px solid #8b3a4a;color:#f3a6b4}
-  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.85rem}
-  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border);vertical-align:top}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
-  .row > div{flex:1;min-width:140px}
-  .token-gate{max-width:420px;margin:60px auto;padding:0 20px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;background:#2a2e38}
-  .pill.status-vip{background:#4a2e0a;color:#f5c04a}
-  .pill.status-customer{background:#0a3a2e;color:var(--ok)}
-  .pill.status-new{background:#2a2e38}
-  a{color:var(--accent2)}
-  .catalog-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:10px}
-  .catalog-card{background:#0f1115;border:1px solid var(--border);border-radius:10px;padding:14px}
-  .catalog-card h3{margin:0 0 6px;font-size:.95rem}
-  .catalog-card .price{font-weight:700;color:var(--accent)}
-  .live-layout{display:grid;grid-template-columns:280px 1fr;gap:14px}
-  .fan-list{max-height:600px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
-  .fan-item{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}
-  .fan-item:hover,.fan-item.active{background:#1f2330}
-  .fan-item .name{font-weight:600;font-size:.88rem}
-  .fan-item .preview{font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .thread{border:1px solid var(--border);border-radius:10px;padding:14px;max-height:600px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
-  .msg{max-width:75%;padding:8px 12px;border-radius:12px;font-size:.88rem}
-  .msg.fan{align-self:flex-start;background:#1f2330}
-  .msg.assistant{align-self:flex-end;background:linear-gradient(135deg,rgba(232,121,166,.25),rgba(124,156,255,.25))}
+  nav{width:232px;flex:0 0 232px;background:var(--bg-soft);border-right:1px solid var(--border-soft);
+      padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 22px;margin-bottom:6px;border-bottom:1px solid var(--border-soft)}
+  .brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 38px;box-shadow:0 4px 14px rgba(244,183,64,.28)}
+  .brand-text{line-height:1.15}
+  .brand-text .name{font-weight:800;font-size:1.02rem;letter-spacing:.01em}
+  .brand-text .tag{font-size:.62rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
+
+  .nav-group{display:flex;flex-direction:column;gap:2px;margin-top:14px}
+  .nav-btn{display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;border:none;
+      color:var(--muted);padding:10px 11px;border-radius:10px;font-size:.86rem;font-weight:500;cursor:pointer;
+      font-family:inherit;position:relative;transition:background .12s,color .12s}
+  .nav-btn svg{width:17px;height:17px;flex:0 0 17px;opacity:.85}
+  .nav-btn:hover{background:var(--surface);color:var(--text)}
+  .nav-btn.active{background:var(--accent-soft);color:var(--accent)}
+  .nav-btn.active svg{opacity:1}
+  .nav-btn.active::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:3px;border-radius:0 4px 4px 0;background:var(--accent)}
+  .nav-foot{margin-top:auto;padding:10px 8px 2px;font-size:.68rem;color:var(--muted-2);border-top:1px solid var(--border-soft)}
+
+  main{flex:1;padding:28px 34px 60px;max-width:1180px}
+  .page-head{margin-bottom:22px}
+  .page-head h2{margin:0 0 4px;font-size:1.4rem;font-weight:800;letter-spacing:-.01em}
+  .page-head p{margin:0;color:var(--muted);font-size:.86rem}
+
+  /* ---------- stat cards ---------- */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:26px}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;
+      display:flex;flex-direction:column;gap:10px}
+  .stat-top{display:flex;align-items:center;justify-content:space-between}
+  .stat-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center}
+  .stat-icon svg{width:17px;height:17px}
+  .stat-value{font-size:1.7rem;font-weight:800;letter-spacing:-.01em}
+  .stat-label{color:var(--muted);font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+
+  /* ---------- panels / cards ---------- */
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:20px}
+  .panel h3{margin:0 0 14px;font-size:1rem;font-weight:700}
+  .panel-sub{color:var(--muted);font-size:.8rem;margin:-8px 0 16px}
+
+  label{display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin:12px 0 5px;letter-spacing:.01em}
+  input,textarea,select{width:100%;padding:9px 11px;background:var(--bg-soft);border:1px solid var(--border);
+      border-radius:var(--radius-sm);color:var(--text);font-size:.87rem;font-family:inherit;transition:border-color .12s}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+  textarea{min-height:64px;resize:vertical}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+  .row > div{flex:1;min-width:160px}
+
+  button.btn{cursor:pointer;border:none;border-radius:var(--radius-sm);padding:9px 16px;font-weight:700;
+      font-size:.83rem;font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:filter .12s,background .12s}
+  button.btn svg{width:14px;height:14px}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#181000}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .btn-ghost{background:var(--surface-2);border:1px solid var(--border);color:var(--text)}
+  .btn-ghost:hover{background:var(--surface-hover)}
+  .btn-danger{background:var(--red-soft);border:1px solid rgba(248,113,113,.3);color:var(--red)}
+  .btn-danger:hover{background:rgba(248,113,113,.2)}
+  .btn-sm{padding:6px 11px;font-size:.75rem}
+  .btn-icon{padding:7px;width:30px;height:30px;justify-content:center}
+
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;font-size:.84rem}
+  th{text-align:left;padding:9px 10px;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
+      letter-spacing:.05em;border-bottom:1px solid var(--border)}
+  td{padding:11px 10px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+  tbody tr:hover{background:var(--surface-2)}
+  code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:.78rem}
+
+  /* ---------- badges / pills ---------- */
+  .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:.68rem;
+      font-weight:700;text-transform:uppercase;letter-spacing:.03em;background:var(--surface-2);color:var(--muted)}
+  .pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .pill-new{background:rgba(139,147,167,.15);color:var(--muted)}
+  .pill-engaged{background:rgba(96,165,250,.15);color:var(--blue)}
+  .pill-customer{background:rgba(52,211,153,.15);color:var(--green)}
+  .pill-vip{background:rgba(244,183,64,.16);color:var(--accent)}
+  .pill-inactive{background:rgba(248,113,113,.13);color:var(--red)}
+  .pill-tier-entry{background:rgba(139,147,167,.15);color:#b7bdc9}
+  .pill-tier-standard{background:rgba(96,165,250,.15);color:var(--blue)}
+  .pill-tier-premium{background:rgba(167,139,250,.15);color:var(--violet)}
+  .pill-tier-custom{background:rgba(244,183,64,.16);color:var(--accent)}
+  .pill-off{background:rgba(248,113,113,.13);color:var(--red)}
+  .chip{font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(45,212,191,.15);color:var(--teal)}
+  .chip-warn{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:600;color:var(--accent-2)}
+  .chip-warn svg{width:12px;height:12px}
+
   .muted{color:var(--muted);font-size:.8rem}
-  .chip{font-size:.72rem;padding:2px 8px;border-radius:999px;background:#2a2e38;margin-right:4px}
+
+  /* ---------- catalogue ---------- */
+  .catalog-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:22px}
+  .catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;
+      display:flex;flex-direction:column;gap:8px}
+  .catalog-card.off{opacity:.55}
+  .catalog-card h4{margin:0;font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .catalog-card .price{font-weight:800;font-size:1.15rem;color:var(--accent);margin-top:2px}
+  .catalog-card .desc{color:var(--muted);font-size:.82rem;min-height:32px}
+  .catalog-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+
+  /* ---------- token gate ---------- */
+  .gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .gate-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius);padding:32px;text-align:center;box-shadow:var(--shadow)}
+  .gate-card .brand-mark{margin:0 auto 16px}
+  .gate-card h1{font-size:1.15rem;margin:0 0 6px}
+  .gate-card p{color:var(--muted);font-size:.82rem;margin:0 0 18px}
+
+  /* ---------- live / conversations ---------- */
+  .live-layout{display:grid;grid-template-columns:290px 1fr;gap:16px}
+  .fan-list{max-height:calc(100vh - 200px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);cursor:pointer}
+  .fan-item:hover{background:var(--surface-2)}
+  .fan-item.active{background:var(--accent-soft)}
+  .avatar{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:flex;align-items:center;justify-content:center;
+      font-size:.78rem;font-weight:800;color:#181000;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  .fan-item .meta{min-width:0;flex:1}
+  .fan-item .name-row{display:flex;align-items:center;gap:6px;justify-content:space-between}
+  .fan-item .name{font-weight:700;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fan-item .preview{font-size:.76rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+
+  .thread-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+  .thread-header{padding:14px 18px;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:10px}
+  .thread{padding:16px 18px;max-height:calc(100vh - 270px);overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+  .msg{max-width:72%;padding:9px 13px;border-radius:14px;font-size:.86rem;line-height:1.35;white-space:pre-wrap}
+  .msg.fan{align-self:flex-start;background:var(--surface-2);border-bottom-left-radius:4px}
+  .msg.assistant{align-self:flex-end;background:linear-gradient(135deg,rgba(244,183,64,.22),rgba(255,138,92,.22));
+      border:1px solid rgba(244,183,64,.25);border-bottom-right-radius:4px}
+
+  /* ---------- banners ---------- */
+  .banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;
+      border:1px solid var(--border);background:var(--surface-2);font-size:.82rem;color:var(--muted);margin-bottom:18px}
+  .banner svg{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
+  .banner strong{color:var(--text)}
+  .banner.info{border-color:rgba(96,165,250,.3);background:rgba(96,165,250,.08);color:#bcd6fb}
+  .banner.warn{border-color:rgba(244,183,64,.35);background:rgba(244,183,64,.09);color:#f4d9a0}
+
+  /* ---------- chart ---------- */
+  .chart-card{display:grid;grid-template-columns:1fr 210px;gap:20px;align-items:stretch}
+  .chart-wrap{position:relative;height:230px}
+  .chart-legend{display:flex;flex-direction:column;gap:10px;justify-content:center}
+  .legend-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface-2)}
+  .legend-dot{width:10px;height:10px;border-radius:3px;flex:0 0 10px}
+  .legend-item .lv{font-weight:800;font-size:1.05rem;line-height:1.2}
+  .legend-item .ll{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  @media (max-width:680px){ .chart-card{grid-template-columns:1fr} }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 880px){
+    .layout{flex-direction:column}
+    nav{width:100%;flex:none;height:auto;position:relative;flex-direction:row;overflow-x:auto;align-items:center;gap:4px}
+    .brand{border-bottom:none;padding:4px 8px;margin:0}
+    .nav-group{flex-direction:row;margin-top:0}
+    .nav-foot{display:none}
+    main{padding:20px}
+    .live-layout{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
 
-<div id="gate" class="token-gate">
-  <h1>🐝 Meeli — Admin</h1>
-  <p class="muted">Colle ton token admin (table <code>settings</code>/<code>admin_tokens</code> dans Supabase).</p>
-  <input id="tokenInput" placeholder="admin token" />
-  <br /><br />
-  <button class="btn btn-primary" onclick="saveToken()">Entrer</button>
+<div id="gate" class="gate-wrap">
+  <div class="gate-card">
+    <div class="brand-mark">🐝</div>
+    <h1>Meeli — Admin</h1>
+    <p>Colle ton token admin pour accéder au tableau de bord.</p>
+    <input id="tokenInput" placeholder="Token admin" />
+    <br /><br />
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveToken()">Entrer</button>
+  </div>
 </div>
 
 <div id="app" style="display:none" class="layout">
   <nav>
-    <h1>🐝 Meeli</h1>
-    <button class="tab-btn active" data-tab="overview" onclick="showTab('overview')">Vue d'ensemble</button>
-    <button class="tab-btn" data-tab="live" onclick="showTab('live')">💬 En direct</button>
-    <button class="tab-btn" data-tab="catalog" onclick="showTab('catalog')">Catalogue</button>
-    <button class="tab-btn" data-tab="persona" onclick="showTab('persona')">Persona & Script</button>
-    <button class="tab-btn" data-tab="test" onclick="showTab('test')">🧪 Tester le bot</button>
-    <button class="tab-btn" data-tab="admins" onclick="showTab('admins')">Accès admin</button>
-    <button class="tab-btn" data-tab="export" onclick="showTab('export')">Export</button>
+    <div class="brand">
+      <div class="brand-mark">🐝</div>
+      <div class="brand-text"><div class="name">Meeli</div><div class="tag">Admin</div></div>
+    </div>
+    <div class="nav-group">
+      <button class="nav-btn active" data-tab="overview" onclick="showTab('overview')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M9.5 19.5v-6h5v6"/></svg>
+        Vue d'ensemble
+      </button>
+      <button class="nav-btn" data-tab="live" onclick="showTab('live')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="13" rx="3"/><path d="M8 21l3.2-3.5"/></svg>
+        En direct
+      </button>
+      <button class="nav-btn" data-tab="catalog" onclick="showTab('catalog')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>
+        Catalogue
+      </button>
+      <button class="nav-btn" data-tab="persona" onclick="showTab('persona')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6.5" x2="20" y2="6.5"/><circle cx="9.5" cy="6.5" r="2.1"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.1"/><line x1="4" y1="17.5" x2="20" y2="17.5"/><circle cx="7.5" cy="17.5" r="2.1"/></svg>
+        Persona &amp; Script
+      </button>
+      <button class="nav-btn" data-tab="test" onclick="showTab('test')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3h5"/><path d="M10.3 3v6.2l-4.6 8a2 2 0 0 0 1.75 3h9.1a2 2 0 0 0 1.75-3l-4.6-8V3"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
+        Tester le bot
+      </button>
+      <button class="nav-btn" data-tab="admins" onclick="showTab('admins')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15.5" r="4"/><path d="M11 12.5 20 3.5"/><path d="M16.5 6 19 8.5"/><path d="M13.5 9 16 11.5"/></svg>
+        Accès admin
+      </button>
+      <button class="nav-btn" data-tab="export" onclick="showTab('export')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 20.5h15"/></svg>
+        Export
+      </button>
+    </div>
+    <div class="nav-foot">Meeli · tableau de bord</div>
   </nav>
 
   <main>
     <!-- VUE D'ENSEMBLE -->
     <div class="tab-content" id="tab-overview">
-      <h2>Vue d'ensemble</h2>
-      <div class="grid" id="stats"></div>
+      <div class="page-head"><h2>Vue d'ensemble</h2><p>Performance globale du bot, campagnes et test A/B.</p></div>
+      <div class="stat-grid" id="stats"></div>
 
-      <section class="panel">
-        <h2>Performance par campagne</h2>
+      <div class="panel">
+        <h3>Revenu &amp; croissance (30 derniers jours)</h3>
+        <div class="chart-card">
+          <div class="chart-wrap"><canvas id="revenueChart"></canvas></div>
+          <div class="chart-legend" id="chartLegend"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Performance par campagne</h3>
         <table id="campaignTable"><thead><tr><th>Campagne</th><th>Clics</th><th>Fans</th><th>Revenu</th></tr></thead><tbody></tbody></table>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>Test A/B (message d'accueil)</h2>
+      <div class="panel">
+        <h3>Test A/B (message d'accueil)</h3>
         <table id="variantTable"><thead><tr><th>Variante</th><th>Fans</th><th>Revenu</th></tr></thead><tbody></tbody></table>
-      </section>
+      </div>
 
-      <section class="panel">
-        <h2>Générer un lien Telegram traçable</h2>
+      <div class="panel">
+        <h3>Générer un lien Telegram traçable</h3>
         <div class="row">
           <div><label>Nom de la campagne</label><input id="campaignLabel" placeholder="telegram_20k" /></div>
           <div style="flex:0"><button class="btn btn-primary" onclick="generateLink()">Générer</button></div>
         </div>
-        <p id="linkResult"></p>
-      </section>
+        <p id="linkResult" class="muted" style="margin-top:10px"></p>
+      </div>
     </div>
 
     <!-- EN DIRECT -->
     <div class="tab-content" id="tab-live" style="display:none">
-      <h2>💬 Conversations en direct</h2>
-      <p class="muted">Se rafraîchit automatiquement toutes les 5 secondes.</p>
+      <div class="page-head"><h2>Conversations en direct</h2></div>
+      <div class="banner info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor" stroke="none"/></svg>
+        <div>Cette liste se rafraîchit automatiquement toutes les <strong>5 secondes</strong>. L'anneau autour de chaque avatar indique le statut du fan.</div>
+      </div>
       <div class="live-layout">
         <div class="fan-list" id="fanList"></div>
-        <div>
-          <div id="fanHeader" class="muted" style="margin-bottom:8px">Sélectionne un fan à gauche</div>
+        <div class="thread-card">
+          <div class="thread-header muted" id="fanHeader">Sélectionne un fan à gauche</div>
           <div class="thread" id="thread"></div>
         </div>
       </div>
@@ -118,31 +305,36 @@
 
     <!-- CATALOGUE -->
     <div class="tab-content" id="tab-catalog" style="display:none">
-      <h2>Catalogue</h2>
+      <div class="page-head"><h2>Catalogue</h2><p>Les articles que Léa peut proposer aux fans.</p></div>
       <div class="catalog-cards" id="catalogCards"></div>
-      <section class="panel">
+      <div class="panel">
         <h3>Ajouter un article</h3>
         <div class="row">
           <div><label>Nom</label><input id="new_name" /></div>
           <div><label>Tier</label>
             <select id="new_tier"><option value="entry">entry</option><option value="standard" selected>standard</option><option value="premium">premium</option><option value="custom">custom</option></select>
           </div>
-          <div><label>Prix (€)</label><input id="new_price" type="number" step="0.01" /></div>
+          <div><label>Prix</label><input id="new_price" type="number" step="0.01" /></div>
           <div><label>Négociable</label><select id="new_negotiable"><option value="false">non</option><option value="true">oui</option></select></div>
         </div>
         <label>Description</label>
         <textarea id="new_description"></textarea>
-        <label>Lien Dropfans (créé sur dropfans.io/create)</label>
-        <input id="new_dropfans_link" placeholder="https://dropfans.io/d/..." />
+        <label>Lien Dropp.fans</label>
+        <input id="new_dropfans_link" placeholder="https://app.dropp.fans/s/..." />
         <br /><br />
         <button class="btn btn-primary" onclick="addItem()">Ajouter au catalogue</button>
-      </section>
+      </div>
     </div>
 
     <!-- PERSONA & SCRIPT -->
     <div class="tab-content" id="tab-persona" style="display:none">
-      <h2>Persona & Script</h2>
-      <section class="panel">
+      <div class="page-head"><h2>Persona &amp; Script</h2><p>La personnalité de l'IA et ses règles de vente.</p></div>
+      <div class="banner warn" id="chatIdWarning" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>
+        <div><strong>Aucun chat_id Telegram configuré</strong> — tu ne reçois pas les alertes VIP / grosses ventes. Renseigne-le dans "Rythme &amp; alertes" ci-dessous.</div>
+      </div>
+      <div class="panel">
+        <h3>Identité</h3>
         <div class="row">
           <div><label>Nom de la créatrice</label><input id="creator_name" /></div>
           <div><label>Nom du persona IA</label><input id="persona_name" /></div>
@@ -150,25 +342,37 @@
         </div>
         <label>Ton</label>
         <textarea id="tone"></textarea>
+      </div>
+
+      <div class="panel">
+        <h3>Messages &amp; script</h3>
         <label>Message d'accueil — variante A (variables: {persona_name}, {creator_name})</label>
         <textarea id="intro_message"></textarea>
         <label>Message d'accueil — variante B (optionnel, pour test A/B)</label>
         <textarea id="intro_message_b"></textarea>
         <label>Script / réponses aux objections (guide l'IA, elle s'en inspire fidèlement)</label>
         <textarea id="playbook" style="min-height:120px"></textarea>
+      </div>
+
+      <div class="panel">
+        <h3>Prix &amp; négociation</h3>
         <div class="row">
-          <div><label>Prix minimum négocié (€)</label><input id="min_custom_price" type="number" step="0.01" /></div>
+          <div><label>Prix minimum négocié</label><input id="min_custom_price" type="number" step="0.01" /></div>
           <div><label>Remise max négociation (%)</label><input id="max_negotiation_discount_pct" type="number" step="1" /></div>
           <div><label>Username du bot Telegram (sans @)</label><input id="telegram_bot_username" /></div>
           <div><label>Symbole monétaire (ex: $, €)</label><input id="currency_symbol" /></div>
         </div>
+      </div>
+
+      <div class="panel">
+        <h3>Rythme &amp; alertes</h3>
         <div class="row">
           <div><label>Délai de réponse min (secondes)</label><input id="response_delay_min_seconds" type="number" /></div>
           <div><label>Délai de réponse max (secondes)</label><input id="response_delay_max_seconds" type="number" /></div>
         </div>
         <div class="row">
-          <div><label>Seuil VIP (€ dépensés)</label><input id="vip_threshold" type="number" step="0.01" /></div>
-          <div><label>Alerte dès qu'une vente dépasse (€)</label><input id="alert_min_sale" type="number" step="0.01" /></div>
+          <div><label>Seuil VIP (dépensés)</label><input id="vip_threshold" type="number" step="0.01" /></div>
+          <div><label>Alerte dès qu'un lien dépasse</label><input id="alert_min_sale" type="number" step="0.01" /></div>
           <div><label>Ton chat_id Telegram (pour recevoir les alertes)</label><input id="admin_telegram_chat_id" /></div>
         </div>
         <div class="row">
@@ -178,15 +382,16 @@
         <textarea id="reengagement_message"></textarea>
         <br />
         <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
-      </section>
+      </div>
     </div>
 
     <!-- TEST -->
     <div class="tab-content" id="tab-test" style="display:none">
-      <h2>🧪 Tester le bot</h2>
-      <p class="muted">Simule une conversation sans passer par Telegram — n'affecte pas les vraies données.</p>
-      <div class="thread" id="testThread" style="min-height:300px"></div>
-      <div class="row" style="margin-top:10px">
+      <div class="page-head"><h2>Tester le bot</h2><p>Simule une conversation sans passer par Telegram — n'affecte pas les vraies données.</p></div>
+      <div class="thread-card">
+        <div class="thread" id="testThread" style="min-height:340px"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
         <div><input id="testInput" placeholder="Écris comme un fan..." onkeydown="if(event.key==='Enter')sendTestMessage()" /></div>
         <div style="flex:0"><button class="btn btn-primary" onclick="sendTestMessage()">Envoyer</button></div>
         <div style="flex:0"><button class="btn btn-ghost" onclick="resetTest()">Réinitialiser</button></div>
@@ -195,24 +400,29 @@
 
     <!-- ADMINS -->
     <div class="tab-content" id="tab-admins" style="display:none">
-      <h2>Accès admin</h2>
-      <p class="muted">Crée un token par personne (toi, une chatteuse...) au lieu de partager le même.</p>
-      <table id="adminsTable"><thead><tr><th>Nom</th><th>Token</th><th>Créé</th><th></th></tr></thead><tbody></tbody></table>
-      <div class="row" style="margin-top:14px">
-        <div><label>Nom de la personne</label><input id="newAdminLabel" placeholder="ex: Chatteuse Sarah" /></div>
-        <div style="flex:0"><button class="btn btn-primary" onclick="addAdmin()">Créer un accès</button></div>
+      <div class="page-head"><h2>Accès admin</h2><p>Crée un token par personne (toi, une chatteuse...) au lieu de partager le même.</p></div>
+      <div class="panel">
+        <table id="adminsTable"><thead><tr><th>Nom</th><th>Token</th><th>Créé</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="row" style="margin-top:16px">
+          <div><label>Nom de la personne</label><input id="newAdminLabel" placeholder="ex: Chatteuse Sarah" /></div>
+          <div style="flex:0"><button class="btn btn-primary" onclick="addAdmin()">Créer un accès</button></div>
+        </div>
       </div>
     </div>
 
     <!-- EXPORT -->
     <div class="tab-content" id="tab-export" style="display:none">
-      <h2>Export</h2>
-      <section class="panel">
-        <p>Télécharge tes données pour la compta ou une analyse externe.</p>
-        <button class="btn btn-ghost" onclick="downloadExport('fans')">Exporter les fans (CSV)</button>
-        &nbsp;
-        <button class="btn btn-ghost" onclick="downloadExport('sales')">Exporter les ventes (CSV)</button>
-      </section>
+      <div class="page-head"><h2>Export</h2><p>Télécharge tes données pour la compta ou une analyse externe.</p></div>
+      <div class="panel" style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="downloadExport('fans')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 20.5h15"/></svg>
+          Exporter les fans (CSV)
+        </button>
+        <button class="btn btn-ghost" onclick="downloadExport('sales')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 20.5h15"/></svg>
+          Exporter les ventes (CSV)
+        </button>
+      </div>
     </div>
   </main>
 </div>
@@ -222,6 +432,15 @@ let TOKEN = localStorage.getItem('meeli_admin_token') || '';
 let liveTimer = null;
 let selectedFanId = null;
 let testHistory = [];
+
+const ICON_WARN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>';
+const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 4.5 19.5 8.5 8 20H4v-4L15.5 4.5z"/></svg>';
+const ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9 7V4.5h6V7"/><path d="M7 7l1 13h8l1-13"/></svg>';
+const ICON_POWER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M7 6.5a7.5 7.5 0 1 0 10 0"/></svg>';
+
+const TIER_COLORS = { entry:'#8b93a7', standard:'#60a5fa', premium:'#a78bfa', custom:'#f4b740' };
+const STATUS_COLORS = { new:'#8b93a7', engaged:'#60a5fa', customer:'#34d399', vip:'#f4b740', inactive:'#f87171' };
+let revenueChart = null;
 
 function saveToken(){
   TOKEN = document.getElementById('tokenInput').value.trim();
@@ -234,15 +453,15 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN, ...(opts.headers || {}) },
   });
-  if (res.status === 401) { document.getElementById('gate').style.display='block'; document.getElementById('app').style.display='none'; throw new Error('unauthorized'); }
+  if (res.status === 401) { document.getElementById('gate').style.display='flex'; document.getElementById('app').style.display='none'; throw new Error('unauthorized'); }
   return res.json();
 }
 
 function showTab(name){
   document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).style.display = 'block';
-  document.querySelector(`.tab-btn[data-tab="${name}"]`).classList.add('active');
+  document.querySelector(`.nav-btn[data-tab="${name}"]`).classList.add('active');
   if (name === 'live') { loadFans(); if (!liveTimer) liveTimer = setInterval(loadFans, 5000); }
   else if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
 }
@@ -250,27 +469,81 @@ function showTab(name){
 async function boot(){
   if (!TOKEN) return;
   try {
-    await Promise.all([loadStats(), loadSettings(), loadCatalog(), loadAdmins()]);
+    await loadSettings();
+    await Promise.all([loadStats(), loadCatalog(), loadAdmins(), loadTimeseries()]);
     document.getElementById('gate').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
   } catch(e) { console.error(e); }
 }
 
+async function loadTimeseries(){
+  if (typeof Chart === 'undefined') return; // CDN indisponible (offline) — le reste du dashboard marche quand même
+  const data = await api('/api/admin/analytics/timeseries?days=30');
+  const labels = data.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }));
+  const revenue = data.map(d => d.revenue);
+  const newFans = data.map(d => d.newFans);
+  const totalRevenue = revenue.reduce((a,b)=>a+b,0);
+  const totalFans = newFans.reduce((a,b)=>a+b,0);
+
+  document.getElementById('chartLegend').innerHTML = `
+    <div class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span><div><div class="lv">${fmtMoney(totalRevenue)}</div><div class="ll">Revenu (30j)</div></div></div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span><div><div class="lv">${totalFans}</div><div class="ll">Nouveaux fans (30j)</div></div></div>
+  `;
+
+  const ctx = document.getElementById('revenueChart').getContext('2d');
+  if (revenueChart) revenueChart.destroy();
+  revenueChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Revenu', data:revenue, borderColor:'#f4b740', backgroundColor:'rgba(244,183,64,.14)', fill:true, tension:.35, yAxisID:'y', pointRadius:0, borderWidth:2.4 },
+        { label:'Nouveaux fans', data:newFans, borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.08)', fill:true, tension:.35, yAxisID:'y1', pointRadius:0, borderWidth:2.4 },
+      ],
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'#1c202c', borderColor:'#272c3a', borderWidth:1, titleColor:'#f2f4f8', bodyColor:'#f2f4f8' } },
+      scales:{
+        x:{ grid:{ color:'rgba(255,255,255,.05)' }, ticks:{ color:'#8b93a7', maxRotation:0, autoSkip:true } },
+        y:{ position:'left', grid:{ color:'rgba(255,255,255,.05)' }, ticks:{ color:'#8b93a7' } },
+        y1:{ position:'right', grid:{ display:false }, ticks:{ color:'#8b93a7' } },
+      },
+    },
+  });
+}
+
+function fmtMoney(n){ return (currencySymbol||'$') + Number(n||0).toFixed(2); }
+
 async function loadStats(){
   const s = await api('/api/admin/analytics');
+  const icon = (svg, bg, color) => `<div class="stat-icon" style="background:${bg};color:${color}">${svg}</div>`;
   document.getElementById('stats').innerHTML = `
-    <div class="card"><div class="stat">${s.fanCount||0}</div><div class="stat-label">Fans</div></div>
-    <div class="card"><div class="stat">${(s.revenue||0).toFixed(2)}€</div><div class="stat-label">Revenu total</div></div>
-    <div class="card"><div class="stat">${s.salesCount||0}</div><div class="stat-label">Ventes</div></div>
-    <div class="card"><div class="stat">${s.byStatus?.vip||0}</div><div class="stat-label">Fans VIP</div></div>
+    <div class="stat-card">
+      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg>','rgba(96,165,250,.15)','#60a5fa')}</div>
+      <div class="stat-value">${s.fanCount||0}</div><div class="stat-label">Fans</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.3 15c.3 1 1.3 1.6 2.7 1.6 1.7 0 2.7-.8 2.7-2 0-3-5.4-1.6-5.4-4.6 0-1.2 1-2 2.7-2 1.4 0 2.4.6 2.7 1.6"/></svg>','var(--accent-soft)','var(--accent)')}</div>
+      <div class="stat-value">${fmtMoney(s.revenue)}</div><div class="stat-label">Liens envoyés (revenu estimé)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>','rgba(45,212,191,.15)','#2dd4bf')}</div>
+      <div class="stat-value">${s.salesCount||0}</div><div class="stat-label">Liens envoyés</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3.5z"/></svg>','rgba(244,183,64,.16)','var(--accent)')}</div>
+      <div class="stat-value">${s.byStatus?.vip||0}</div><div class="stat-label">Fans VIP</div>
+    </div>
   `;
   document.querySelector('#campaignTable tbody').innerHTML = (s.byCampaign||[]).map(c => `
-    <tr><td>${c.campaign_label||'(sans nom)'}</td><td>${c.clicks}</td><td>${c.fans}</td><td>${c.revenue.toFixed(2)}€</td></tr>
+    <tr><td>${c.campaign_label||'(sans nom)'}</td><td>${c.clicks}</td><td>${c.fans}</td><td>${fmtMoney(c.revenue)}</td></tr>
   `).join('') || "<tr><td colspan=\"4\" class=\"muted\">Aucune campagne pour l'instant</td></tr>";
 
   document.querySelector('#variantTable tbody').innerHTML = ['A','B'].map(v => {
     const d = s.byVariant?.[v] || {fans:0, revenue:0};
-    return `<tr><td>Variante ${v}</td><td>${d.fans}</td><td>${d.revenue.toFixed(2)}€</td></tr>`;
+    return `<tr><td>Variante ${v}</td><td>${d.fans}</td><td>${fmtMoney(d.revenue)}</td></tr>`;
   }).join('');
 }
 
@@ -280,6 +553,9 @@ async function loadSettings(){
     'min_custom_price','max_negotiation_discount_pct','telegram_bot_username','currency_symbol','response_delay_min_seconds',
     'response_delay_max_seconds','vip_threshold','alert_min_sale','admin_telegram_chat_id','reengagement_hours','reengagement_message'];
   fields.forEach(f => { const el = document.getElementById(f); if (el) el.value = s[f] ?? ''; });
+  currencySymbol = s.currency_symbol || '$';
+  const warn = document.getElementById('chatIdWarning');
+  if (warn) warn.style.display = s.admin_telegram_chat_id ? 'none' : 'flex';
 }
 
 async function saveSettings(){
@@ -306,15 +582,17 @@ async function loadCatalog(){
 
 function renderCatalog(){
   document.getElementById('catalogCards').innerHTML = catalogCache.map(it => `
-    <div class="catalog-card" id="card-${it.id}">
+    <div class="catalog-card ${it.active ? '' : 'off'}" id="card-${it.id}" style="border-top:3px solid ${TIER_COLORS[it.tier]||TIER_COLORS.entry}">
       <div id="view-${it.id}">
-        <h3>${it.name} <span class="pill">${it.tier}</span> ${it.active ? '' : '<span class="pill">inactif</span>'}</h3>
-        <p class="muted">${it.description||''}</p>
-        <p class="price">${currencySymbol}${Number(it.price).toFixed(2)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</p>
-        <p class="muted">${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien</a>' : '⚠️ pas de lien Dropfans'}</p>
-        <button class="btn btn-ghost" onclick="toggleActive('${it.id}', ${!it.active})">${it.active?'Désactiver':'Activer'}</button>
-        <button class="btn btn-ghost" onclick="startEdit('${it.id}')">Modifier</button>
-        <button class="btn btn-danger" onclick="deleteItem('${it.id}')">Supprimer</button>
+        <h4>${it.name} <span class="pill pill-tier-${it.tier}">${it.tier}</span> ${it.active ? '' : '<span class="pill pill-off">inactif</span>'}</h4>
+        <div class="desc">${it.description||''}</div>
+        <div class="price">${fmtMoney(it.price)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</div>
+        <div>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien ↗</a>' : '<span class="chip-warn">'+ICON_WARN+' pas de lien Dropp.fans</span>'}</div>
+        <div class="catalog-actions">
+          <button class="btn btn-ghost btn-sm" onclick="startEdit('${it.id}')">${ICON_EDIT} Modifier</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
+        </div>
       </div>
       <div id="edit-${it.id}" style="display:none">
         <label>Nom</label><input id="edit_name_${it.id}" value="${(it.name||'').replace(/"/g,'&quot;')}" />
@@ -333,11 +611,13 @@ function renderCatalog(){
             </select>
           </div>
         </div>
-        <label>Lien Dropfans / Dropp.fans</label>
+        <label>Lien Dropp.fans</label>
         <input id="edit_link_${it.id}" value="${it.dropfans_link||''}" />
         <br /><br />
-        <button class="btn btn-primary" onclick="saveEdit('${it.id}')">Enregistrer</button>
-        <button class="btn btn-ghost" onclick="cancelEdit('${it.id}')">Annuler</button>
+        <div class="catalog-actions">
+          <button class="btn btn-primary btn-sm" onclick="saveEdit('${it.id}')">Enregistrer</button>
+          <button class="btn btn-ghost btn-sm" onclick="cancelEdit('${it.id}')">Annuler</button>
+        </div>
       </div>
     </div>
   `).join('') || '<p class="muted">Aucun article dans le catalogue.</p>';
@@ -393,14 +673,25 @@ async function generateLink(){
 }
 
 // ---- En direct ----
+function initials(f){
+  const src = f.first_name || f.telegram_username || '?';
+  return src.slice(0,2).toUpperCase();
+}
+
 async function loadFans(){
   const fans = await api('/api/admin/fans');
   document.getElementById('fanList').innerHTML = fans.map(f => `
     <div class="fan-item ${f.id===selectedFanId?'active':''}" onclick="openFan('${f.id}')">
-      <div class="name">${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)} <span class="pill status-${f.status}">${f.status}</span></div>
-      <div class="preview">${f.last_message ? (f.last_message.role==='fan'?'':'→ ') + f.last_message.content : ''}</div>
+      <div class="avatar" style="box-shadow:0 0 0 2px ${STATUS_COLORS[f.status]||STATUS_COLORS.new}">${initials(f)}</div>
+      <div class="meta">
+        <div class="name-row">
+          <span class="name">${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
+          <span class="pill pill-${f.status}">${f.status}</span>
+        </div>
+        <div class="preview">${f.last_message ? (f.last_message.role==='fan'?'':'→ ') + f.last_message.content : ''}</div>
+      </div>
     </div>
-  `).join('') || "<div class=\"muted\" style=\"padding:12px\">Aucun fan pour l'instant</div>";
+  `).join('') || "<div class=\"muted\" style=\"padding:14px\">Aucun fan pour l'instant</div>";
   if (selectedFanId) loadThread(selectedFanId, true);
 }
 
@@ -414,7 +705,7 @@ async function openFan(id){
 async function loadThread(id, silent){
   const data = await api('/api/admin/fans/'+id+'/messages');
   const f = data.fan;
-  document.getElementById('fanHeader').innerHTML = `${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id} — <span class="pill status-${f.status}">${f.status}</span> — ${Number(f.total_spent).toFixed(2)}€ dépensés ${f.memory_notes ? '<br><span class="muted">🧠 '+f.memory_notes+'</span>' : ''}`;
+  document.getElementById('fanHeader').innerHTML = `<strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong> &nbsp;<span class="pill pill-${f.status}">${f.status}</span> &nbsp;${fmtMoney(f.total_spent)} envoyés ${f.memory_notes ? '<br><span class="muted">🧠 '+f.memory_notes+'</span>' : ''}`;
   document.getElementById('thread').innerHTML = data.messages.map(m => `<div class="msg ${m.role==='fan'?'fan':'assistant'}">${m.content}</div>`).join('');
 }
 
@@ -449,8 +740,8 @@ async function loadAdmins(){
   const admins = await api('/api/admin/admins');
   document.getElementById('adminsTable').querySelector('tbody').innerHTML = admins.map(a => `
     <tr><td>${a.label}</td><td><code>${a.token}</code></td><td>${new Date(a.created_at).toLocaleDateString()}</td>
-    <td><button class="btn btn-danger" onclick="removeAdmin('${a.id}')">Supprimer</button></td></tr>
-  `).join('');
+    <td><button class="btn btn-danger btn-sm" onclick="removeAdmin('${a.id}')">${ICON_TRASH} Supprimer</button></td></tr>
+  `).join('') || "<tr><td colspan=\"4\" class=\"muted\">Aucun accès créé pour l'instant</td></tr>";
 }
 
 async function addAdmin(){
