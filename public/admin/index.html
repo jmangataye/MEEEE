@@ -1647,11 +1647,23 @@ async function loadSafetyIncidents(){
   panel.style.display = 'block';
   document.getElementById('safetyList').innerHTML = incidents.slice(0, 10).map(i => `
     <div class="safety-item">
-      <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}</div>
+        <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;padding:3px 9px;font-size:.7rem" onclick="resolveSafetyIncident('${i.id}')">✓ Traité</button>
+      </div>
       <div style="font-size:.82rem">${(i.reasons||[]).join('; ')}</div>
       <div class="muted" style="font-size:.78rem;font-style:italic">"${(i.flagged_text||'').slice(0,180)}"</div>
     </div>
   `).join('');
+}
+
+async function resolveSafetyIncident(id){
+  try {
+    await api('/api/admin/safety-incidents/'+id+'/resolve', { method:'PUT' });
+    loadSafetyIncidents();
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  }
 }
 
 function fmtMinutesAgo(min){
@@ -1669,10 +1681,22 @@ async function loadStalledConversations(){
   panel.style.display = 'block';
   document.getElementById('stalledList').innerHTML = stalled.slice(0, 15).map(s => `
     <div class="safety-item" style="cursor:pointer" onclick="showTab('live');openFan('${s.fan_id}')">
-      <div class="muted" style="font-size:.72rem">${fmtMinutesAgo(s.minutes_since)} — ${s.telegram_username ? '@'+s.telegram_username : (s.first_name || s.telegram_user_id)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div class="muted" style="font-size:.72rem">${fmtMinutesAgo(s.minutes_since)} — ${s.telegram_username ? '@'+s.telegram_username : (s.first_name || s.telegram_user_id)}</div>
+        <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;padding:3px 9px;font-size:.7rem" onclick="event.stopPropagation();dismissStalledFan('${s.fan_id}')">✓ Traité</button>
+      </div>
       <div class="muted" style="font-size:.78rem;font-style:italic">"${(s.last_message||'').slice(0,180)}"</div>
     </div>
   `).join('');
+}
+
+async function dismissStalledFan(fanId){
+  try {
+    await api('/api/admin/stalled-conversations/'+fanId+'/dismiss', { method:'PUT' });
+    loadStalledConversations();
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  }
 }
 
 // ---- Test / simulateur ----

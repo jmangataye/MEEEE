@@ -34,6 +34,8 @@ const {
   markReengaged,
   logSafetyIncident,
   listSafetyIncidents,
+  resolveSafetyIncident,
+  dismissStalledFan,
   listVaultAssets,
   addVaultAsset,
   deleteVaultAsset,
@@ -234,7 +236,13 @@ async function handleNonTextMessage(msg, mediaType) {
 // (le fil du dashboard reste temps réel) — seul le déclenchement de l'appel
 // IA est retardé et regroupé.
 const pendingBatches = new Map(); // fanKey -> { fan, from, chatId, history, texts, firstAt, timer }
-const BATCH_DEBOUNCE_MS = 4000;
+// 6000ms plutôt que 4000 : repéré le 29/08 qu'un fan envoyant deux messages
+// liés à ~5s d'intervalle (juste au-dessus de l'ancienne fenêtre de 4s)
+// déclenchait DEUX lots séparés au lieu d'un seul — deux appels à Claude qui
+// ne se voient pas, produisant deux réponses différentes (ex: deux pitchs de
+// prix contradictoires envoyés à 11s d'intervalle). Une fenêtre plus large
+// réduit ce risque, sans trop retarder les fans qui écrivent normalement.
+const BATCH_DEBOUNCE_MS = 6000;
 const BATCH_MAX_WAIT_MS = 15000;
 
 async function enqueueFanMessage(fanKey, msg) {
@@ -659,6 +667,17 @@ app.get('/api/admin/safety-incidents', requireAdminToken, async (req, res) => {
   }
 });
 
+// "Dépiler" un incident traité — disparaît du panneau (reste en base pour
+// l'historique, juste marqué résolu).
+app.put('/api/admin/safety-incidents/:id/resolve', requireAdminToken, async (req, res) => {
+  try {
+    await resolveSafetyIncident(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: "En attente de révision" — conversations où le fan a
 // écrit en dernier, l'IA n'est pas en pause, et pourtant rien n'a été
 // renvoyé depuis plus de quelques minutes (voir getStalledConversations).
@@ -669,6 +688,17 @@ app.get('/api/admin/stalled-conversations', requireAdminToken, async (req, res) 
   try {
     const minutes = Math.max(1, Number(req.query.minutes) || 5);
     res.json(await getStalledConversations(minutes));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// "Dépiler" une conversation bloquée — disparaît du panneau tant que le fan
+// n'a pas écrit de nouveau message depuis (voir dismissStalledFan).
+app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, async (req, res) => {
+  try {
+    await dismissStalledFan(req.params.fanId);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
