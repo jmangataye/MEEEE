@@ -53,6 +53,19 @@ function splitIntoBubbles(text) {
     .filter(Boolean);
 }
 
+// Filet de sécurité anti-spam : même si le modèle génère trop de blocs séparés,
+// on ne laisse jamais partir plus de MAX_BUBBLES messages Telegram distincts
+// pour une seule réponse — le reste est recollé au dernier bloc (une seule
+// bulle peut avoir plusieurs lignes, ça reste un seul message Telegram).
+const MAX_BUBBLES = 2;
+function capBubbles(bubbles, max = MAX_BUBBLES) {
+  if (bubbles.length <= max) return bubbles;
+  const kept = bubbles.slice(0, max - 1);
+  const rest = bubbles.slice(max - 1).join('\n');
+  kept.push(rest);
+  return kept;
+}
+
 // Nettoyage défensif : au cas où le modèle utilise quand même ¿/¡, on les
 // retire pour garder un style de chat casuel (personne n'écrit "¿cómo estás?"
 // sur son téléphone, juste "como estas?").
@@ -61,7 +74,7 @@ function stripInvertedPunctuation(text) {
 }
 
 async function replyToFan({ settings, chatId, fan, text }) {
-  const bubbles = splitIntoBubbles(text).map(stripInvertedPunctuation);
+  const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
   for (const bubble of bubbles) {
     await sendMessageWithTypingDelay(settings.telegram_bot_token, chatId, bubble, {
       minSeconds: settings.response_delay_min_seconds,
@@ -138,12 +151,14 @@ app.post('/telegram/webhook', async (req, res) => {
       if (call.name === 'send_offer') {
         const item = catalog.find((c) => c.id === call.input.catalog_item_id);
         if (!item) continue;
-        if (purchasedItemIds.includes(item.id)) {
-          // Filet de sécurité : même si le modèle se trompe, on ne renvoie jamais
-          // un lien déjà acheté par ce fan.
-          console.warn(`Tentative de renvoyer un article déjà acheté (fan ${fan.id}, item ${item.id}) — ignoré.`);
-          continue;
-        }
+
+        // On ne bloque plus le renvoi d'un lien déjà envoyé : on n'a aucune
+        // confirmation réelle de paiement côté Dropp.fans (pas de webhook), donc
+        // "déjà dans purchasedItemIds" veut juste dire "déjà envoyé une fois" —
+        // bloquer ici empêchait des fans réellement intéressés de recevoir leur
+        // lien une seconde fois (ex: ils redemandent, ont eu un souci de paiement).
+        const alreadyOffered = purchasedItemIds.includes(item.id);
+
         const link = await getLinkForItem(item);
         if (!link) {
           const fallback = `Uy, tuve un pequeño problema técnico generando tu enlace — ${settings.creator_name} se va a encargar personalmente, dame un momento 🙏`;
@@ -154,26 +169,32 @@ app.post('/telegram/webhook', async (req, res) => {
         const offerMsg = `${note}\n${link}`;
         await replyToFan({ settings, chatId, fan, text: offerMsg });
 
-        const updatedFan = await recordSale({
-          fan_id: fan.id,
-          catalog_item_id: item.id,
-          price: call.input.agreed_price,
-          dropfans_link: link,
-        });
+        // On ne compte une "vente" (et on n'augmente total_spent / le statut
+        // VIP) que la première fois qu'on envoie ce lien à ce fan — sinon un
+        // simple renvoi gonflerait artificiellement les chiffres alors qu'aucun
+        // paiement supplémentaire n'a eu lieu.
+        if (!alreadyOffered) {
+          const updatedFan = await recordSale({
+            fan_id: fan.id,
+            catalog_item_id: item.id,
+            price: call.input.agreed_price,
+            dropfans_link: link,
+          });
 
-        if (Number(call.input.agreed_price) >= Number(settings.alert_min_sale)) {
-          await maybeAlertAdmin(
-            settings,
-            `💰 Venta: ${item.name} — ${settings.currency_symbol || '$'}${call.input.agreed_price} (fan: ${fan.telegram_username || fan.first_name || fan.telegram_user_id})`
-          );
-        }
+          if (Number(call.input.agreed_price) >= Number(settings.alert_min_sale)) {
+            await maybeAlertAdmin(
+              settings,
+              `💰 Lien envoyé: ${item.name} — ${settings.currency_symbol || '$'}${call.input.agreed_price} (fan: ${fan.telegram_username || fan.first_name || fan.telegram_user_id})`
+            );
+          }
 
-        if (updatedFan && Number(updatedFan.total_spent) >= Number(settings.vip_threshold) && !updatedFan.vip_alerted) {
-          await markVipAlerted(fan.id);
-          await maybeAlertAdmin(
-            settings,
-            `⭐ Nuevo VIP: ${fan.telegram_username || fan.first_name || fan.telegram_user_id} — total gastado: ${settings.currency_symbol || '$'}${updatedFan.total_spent}`
-          );
+          if (updatedFan && Number(updatedFan.total_spent) >= Number(settings.vip_threshold) && !updatedFan.vip_alerted) {
+            await markVipAlerted(fan.id);
+            await maybeAlertAdmin(
+              settings,
+              `⭐ Nuevo VIP: ${fan.telegram_username || fan.first_name || fan.telegram_user_id} — total gastado: ${settings.currency_symbol || '$'}${updatedFan.total_spent}`
+            );
+          }
         }
       }
       if (call.name === 'update_fan_status') {
@@ -280,7 +301,7 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
       fanMessage: message,
       fan: fakeFan,
     });
-    const bubbles = splitIntoBubbles(text).map(stripInvertedPunctuation);
+    const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
     res.json({ text, bubbles, toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })) });
   } catch (err) {
     console.error(err);
