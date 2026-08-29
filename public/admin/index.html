@@ -835,10 +835,26 @@ async function loadAdminIdentity(){
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN, ...(opts.headers || {}) },
-  });
+  // Filet de sécurité côté navigateur : si jamais le serveur ne répond
+  // jamais à une requête (un bug non prévu, une coupure réseau...), on ne
+  // veut plus qu'un bouton reste bloqué sur "Enregistrement..." pour
+  // toujours sans aucun message — on abandonne au bout de 20s avec une
+  // vraie erreur exploitable par l'appelant (voir saveSettings()).
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+  let res;
+  try {
+    res = await fetch(path, {
+      ...opts,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN, ...(opts.headers || {}) },
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Le serveur ne répond pas (délai dépassé) — réessaie dans un instant.');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (res.status === 401) { document.getElementById('gate').style.display='flex'; document.getElementById('app').style.display='none'; throw new Error('unauthorized'); }
   return res.json();
 }

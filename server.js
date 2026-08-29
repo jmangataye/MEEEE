@@ -546,11 +546,26 @@ app.post('/api/tracking-link', async (req, res) => {
 
 // ---------- API Admin: settings ----------
 app.get('/api/admin/settings', requireAdminToken, async (req, res) => {
-  res.json(await getSettings());
+  try {
+    res.json(await getSettings());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// IMPORTANT : sans try/catch ici, une erreur dans updateSettings() (ex: le
+// bug bigint corrigé dans lib/supabase.js) ne renvoyait JAMAIS de réponse au
+// dashboard — la requête restait bloquée côté navigateur indéfiniment. Le
+// bouton "Enregistrer" restait donc coincé sur "Enregistrement..." pour
+// toujours, sans succès NI message d'erreur — exactement le symptôme
+// rapporté ("ça n'enregistre pas"). Repéré le 29/08 via les logs serveur.
 app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
-  res.json(await updateSettings(req.body));
+  try {
+    res.json(await updateSettings(req.body));
+  } catch (err) {
+    console.error('Erreur mise à jour réglages:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- API Admin: catalogue ----------
