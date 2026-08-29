@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Discute avec Léa</title>
+<style>
+  :root{color-scheme:dark;--bg:#120c14;--card:#1c1420;--accent:#e879a6;--accent2:#7c9cff;--text:#f5eef3;--muted:#b9a9bd;}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,#2a1a2c,var(--bg));font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);padding:24px;}
+  .card{max-width:420px;width:100%;background:var(--card);border:1px solid #3a2a3e;border-radius:20px;padding:32px 28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .avatar{width:84px;height:84px;border-radius:50%;margin:0 auto 16px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:2rem;}
+  h1{font-size:1.3rem;margin:0 0 6px}
+  p{color:var(--muted);font-size:.92rem;line-height:1.5}
+  .cta{display:inline-block;margin-top:20px;padding:13px 28px;border-radius:999px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;text-decoration:none;font-weight:700;font-size:.95rem;}
+  .fine{margin-top:18px;font-size:.72rem;color:#7d6e80}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="avatar">💬</div>
+    <h1>Léa, l'assistante de <span id="creatorName">ta créatrice préférée</span></h1>
+    <p>Clique pour démarrer une conversation privée sur Telegram. Léa (assistante IA) va faire connaissance avec toi et te proposer exactement ce que tu cherches.</p>
+    <a class="cta" id="ctaLink" href="#">Discuter maintenant →</a>
+    <p class="fine">Léa est une assistante automatisée. Les paiements se font via des liens sécurisés Dropfans.</p>
+  </div>
+
+<script>
+  // Remplace CAMPAIGN par le nom de ta campagne, ou laisse vide pour un lien générique.
+  const CAMPAIGN = new URLSearchParams(location.search).get('src') || 'landing_direct';
+
+  fetch('/api/tracking-link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ campaign_label: CAMPAIGN }),
+  })
+    .then(r => r.json())
+    .then(data => { document.getElementById('ctaLink').href = data.link; })
+    .catch(() => {
+      // fallback si l'API est indisponible : lien générique sans tracking
+      document.getElementById('ctaLink').href = 'https://t.me/REMPLACE_PAR_TON_BOT';
+    });
+</script>
+</body>
+</html>

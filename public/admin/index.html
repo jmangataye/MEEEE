@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meeli — Admin</title>
+<style>
+  :root{color-scheme:light dark;--bg:#0f1115;--card:#181b22;--border:#2a2e38;--text:#eef0f3;--muted:#9aa1ac;--accent:#e879a6;--accent2:#7c9cff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;}
+  h1{font-size:1.4rem;margin:0 0 4px}
+  .sub{color:var(--muted);margin-bottom:24px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:28px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .stat{font-size:1.8rem;font-weight:700}
+  .stat-label{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+  section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+  section h2{margin-top:0;font-size:1.05rem}
+  label{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;padding:8px 10px;background:#0f1115;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:.9rem}
+  textarea{min-height:60px}
+  button{cursor:pointer;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:.85rem}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.85rem}
+  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+  .row > div{flex:1;min-width:140px}
+  .token-gate{max-width:420px;margin:60px auto}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;background:#2a2e38}
+  a{color:var(--accent2)}
+</style>
+</head>
+<body>
+
+<div id="gate" class="token-gate">
+  <h1>Meeli — Admin</h1>
+  <p class="sub">Colle le token admin (récupéré dans Supabase, table <code>settings</code>, colonne <code>admin_api_token</code>).</p>
+  <input id="tokenInput" placeholder="admin token" />
+  <br /><br />
+  <button class="btn-primary" onclick="saveToken()">Entrer</button>
+</div>
+
+<div id="app" style="display:none">
+  <h1>🐝 Meeli — Tableau de bord</h1>
+  <p class="sub">Pilotage du persona, du catalogue et des ventes.</p>
+
+  <div class="grid" id="stats"></div>
+
+  <section>
+    <h2>Générer un lien Telegram traçable</h2>
+    <div class="row">
+      <div>
+        <label>Nom de la campagne (ex: bio_instagram, telegram_20k)</label>
+        <input id="campaignLabel" placeholder="telegram_20k" />
+      </div>
+      <div style="flex:0">
+        <button class="btn-primary" onclick="generateLink()">Générer</button>
+      </div>
+    </div>
+    <p id="linkResult"></p>
+  </section>
+
+  <section>
+    <h2>Persona & réglages</h2>
+    <div class="row">
+      <div><label>Nom de la créatrice</label><input id="creator_name" /></div>
+      <div><label>Nom du persona IA</label><input id="persona_name" /></div>
+    </div>
+    <label>Ton</label>
+    <textarea id="tone"></textarea>
+    <label>Message d'accueil (variables: {persona_name}, {creator_name})</label>
+    <textarea id="intro_message"></textarea>
+    <div class="row">
+      <div><label>Prix minimum négocié (€)</label><input id="min_custom_price" type="number" step="0.01" /></div>
+      <div><label>Remise max en négociation (%)</label><input id="max_negotiation_discount_pct" type="number" step="1" /></div>
+      <div><label>Username du bot Telegram (sans @)</label><input id="telegram_bot_username" /></div>
+    </div>
+    <br />
+    <button class="btn-primary" onclick="saveSettings()">Enregistrer</button>
+  </section>
+
+  <section>
+    <h2>Catalogue</h2>
+    <table id="catalogTable">
+      <thead><tr><th>Nom</th><th>Tier</th><th>Prix</th><th>Négociable</th><th>Lien Dropfans</th><th>Actif</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <br />
+    <h3>Ajouter un article</h3>
+    <div class="row">
+      <div><label>Nom</label><input id="new_name" /></div>
+      <div><label>Tier</label>
+        <select id="new_tier"><option value="entry">entry</option><option value="standard" selected>standard</option><option value="premium">premium</option><option value="custom">custom</option></select>
+      </div>
+      <div><label>Prix (€)</label><input id="new_price" type="number" step="0.01" /></div>
+      <div><label>Négociable</label><select id="new_negotiable"><option value="false">non</option><option value="true">oui</option></select></div>
+    </div>
+    <label>Description</label>
+    <textarea id="new_description"></textarea>
+    <label>Lien Dropfans (créé sur dropfans.io/create)</label>
+    <input id="new_dropfans_link" placeholder="https://dropfans.io/d/..." />
+    <br /><br />
+    <button class="btn-primary" onclick="addItem()">Ajouter au catalogue</button>
+  </section>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('meeli_admin_token') || '';
+
+function saveToken(){
+  TOKEN = document.getElementById('tokenInput').value.trim();
+  localStorage.setItem('meeli_admin_token', TOKEN);
+  boot();
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN, ...(opts.headers || {}) },
+  });
+  if (res.status === 401) { document.getElementById('gate').style.display='block'; document.getElementById('app').style.display='none'; throw new Error('unauthorized'); }
+  return res.json();
+}
+
+async function boot(){
+  if (!TOKEN) return;
+  try {
+    await loadStats();
+    await loadSettings();
+    await loadCatalog();
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } catch(e) { console.error(e); }
+}
+
+async function loadStats(){
+  const s = await api('/api/admin/analytics');
+  document.getElementById('stats').innerHTML = `
+    <div class="card"><div class="stat">${s.fanCount||0}</div><div class="stat-label">Fans</div></div>
+    <div class="card"><div class="stat">${(s.revenue||0).toFixed(2)}€</div><div class="stat-label">Revenu total</div></div>
+    <div class="card"><div class="stat">${s.salesCount||0}</div><div class="stat-label">Ventes</div></div>
+    <div class="card"><div class="stat">${s.byStatus?.vip||0}</div><div class="stat-label">Fans VIP</div></div>
+  `;
+}
+
+async function loadSettings(){
+  const s = await api('/api/admin/settings');
+  creator_name.value = s.creator_name || '';
+  persona_name.value = s.persona_name || '';
+  tone.value = s.tone || '';
+  intro_message.value = s.intro_message || '';
+  min_custom_price.value = s.min_custom_price || 0;
+  max_negotiation_discount_pct.value = s.max_negotiation_discount_pct || 0;
+  telegram_bot_username.value = s.telegram_bot_username || '';
+}
+
+async function saveSettings(){
+  await api('/api/admin/settings', { method:'PUT', body: JSON.stringify({
+    creator_name: creator_name.value,
+    persona_name: persona_name.value,
+    tone: tone.value,
+    intro_message: intro_message.value,
+    min_custom_price: parseFloat(min_custom_price.value),
+    max_negotiation_discount_pct: parseFloat(max_negotiation_discount_pct.value),
+    telegram_bot_username: telegram_bot_username.value,
+  })});
+  alert('Réglages enregistrés ✅');
+}
+
+async function loadCatalog(){
+  const items = await api('/api/admin/catalog');
+  const tbody = document.querySelector('#catalogTable tbody');
+  tbody.innerHTML = items.map(it => `
+    <tr>
+      <td>${it.name}</td>
+      <td><span class="pill">${it.tier}</span></td>
+      <td>${Number(it.price).toFixed(2)}€</td>
+      <td>${it.is_negotiable ? 'oui' : 'non'}</td>
+      <td>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">lien</a>' : '<em>à ajouter</em>'}</td>
+      <td>${it.active ? '✅' : '—'}</td>
+      <td><button class="btn-ghost" onclick="toggleActive('${it.id}', ${!it.active})">${it.active?'Désactiver':'Activer'}</button></td>
+    </tr>
+  `).join('');
+}
+
+async function toggleActive(id, active){
+  await api('/api/admin/catalog/'+id, { method:'PUT', body: JSON.stringify({ active }) });
+  loadCatalog();
+}
+
+async function addItem(){
+  await api('/api/admin/catalog', { method:'POST', body: JSON.stringify({
+    name: new_name.value,
+    tier: new_tier.value,
+    price: parseFloat(new_price.value),
+    is_negotiable: new_negotiable.value === 'true',
+    description: new_description.value,
+    dropfans_link: new_dropfans_link.value || null,
+    active: true,
+    sort_order: 99,
+  })});
+  new_name.value=''; new_price.value=''; new_description.value=''; new_dropfans_link.value='';
+  loadCatalog();
+}
+
+async function generateLink(){
+  const res = await fetch('/api/tracking-link', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ campaign_label: campaignLabel.value }) });
+  const data = await res.json();
+  document.getElementById('linkResult').innerHTML = `Lien à poster dans ton canal Telegram : <br/><a href="${data.link}" target="_blank">${data.link}</a>`;
+}
+
+boot();
+</script>
+</body>
+</html>
