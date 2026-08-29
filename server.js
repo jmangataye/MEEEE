@@ -13,6 +13,7 @@ const {
   recordSale,
   getPurchasedItemIds,
   setFanStatus,
+  setFanPaused,
   markVipAlerted,
   listFansWithPreview,
   getFanById,
@@ -25,11 +26,14 @@ const {
   getDailyTimeseries,
   getFansForReengagement,
   markReengaged,
+  logSafetyIncident,
+  listSafetyIncidents,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn } = require('./lib/claudeAgent');
 const { sendMessage, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
+const { reviewOutgoingText, reviewOfferInput, FALLBACK_MESSAGE } = require('./lib/safetyFilter');
 
 const app = express();
 app.use(express.json());
@@ -177,6 +181,17 @@ async function handleIncomingMessage(msg) {
 
     await logMessage(fan.id, 'fan', msg.text);
 
+    // ---------- Pause par conversation ----------
+    // Si l'admin (ou le filtre de sécurité ci-dessous, lors d'un incident
+    // précédent) a mis cette conversation en pause, on continue à recevoir et
+    // journaliser les messages du fan (ci-dessus) mais on ne fait plus
+    // répondre l'IA automatiquement — Bryan/Meely reprend la main via le
+    // dashboard (envoi manuel) jusqu'à ce qu'il réactive l'IA pour ce fan.
+    if (fan.paused) {
+      console.log(`Fan ${fan.id} en pause — message reçu, pas de réponse automatique.`);
+      return;
+    }
+
     const catalog = await getActiveCatalog();
     const history = await getRecentHistory(fan.id, 20);
     const purchasedItemIds = await getPurchasedItemIds(fan.id);
@@ -190,14 +205,70 @@ async function handleIncomingMessage(msg) {
       purchasedItemIds,
     });
 
+    // ---------- Filtre de sécurité serveur (voir lib/safetyFilter.js) ----------
+    // Les règles du prompt ne suffisent pas toujours face à un fan insistant
+    // (constaté en prod le 29/08/2026 : contenu explicite + prix inventés
+    // générés APRÈS le déploiement d'une règle de prompt censée l'empêcher).
+    // Ici on vérifie le texte réellement généré avant de l'envoyer : si un
+    // problème est détecté, on n'envoie JAMAIS ce texte — on envoie un message
+    // de repli fixe, on journalise l'incident, on met la conversation en pause
+    // automatiquement, et on alerte l'admin pour qu'il reprenne la main.
+    const textReview = reviewOutgoingText({ text, catalog, settings });
+    if (!textReview.ok) {
+      console.error(`⚠️ Filtre de sécurité (texte) déclenché pour fan ${fan.id}:`, textReview.reasons, '| texte bloqué:', text);
+      await logSafetyIncident({ fan_id: fan.id, reasons: textReview.reasons, flagged_text: text });
+      await setFanPaused(fan.id, true);
+      await replyToFan({ settings, chatId, fan, text: FALLBACK_MESSAGE });
+      await maybeAlertAdmin(
+        settings,
+        `🚨 Alerte sécurité: réponse bloquée pour ${fan.telegram_username || fan.first_name || fan.telegram_user_id}\nRaisons: ${textReview.reasons.join('; ')}\nLa conversation a été mise en PAUSE automatiquement — va voir le dashboard pour reprendre la main.`
+      );
+      return;
+    }
+
     if (text) {
       await replyToFan({ settings, chatId, fan, text });
     }
 
+    // Le prompt demande à l'IA de ne jamais envoyer deux articles différents en
+    // réponse à un seul message du fan — mais rien n'empêchait structurellement
+    // le modèle d'appeler "send_offer" deux fois dans le même tour s'il décidait
+    // d'ignorer cette règle (le même problème, au fond, que celui qui a motivé
+    // le filtre ci-dessus). On l'impose donc aussi ici, côté serveur : au plus
+    // une offre traitée par tour, qu'elle soit valide ou bloquée.
+    let offerHandledThisTurn = false;
+
     for (const call of toolCalls) {
       if (call.name === 'send_offer') {
+        if (offerHandledThisTurn) {
+          console.warn(`Deuxième "send_offer" ignoré dans le même tour pour fan ${fan.id} — jamais plus d'une offre par message.`);
+          continue;
+        }
+        offerHandledThisTurn = true;
+
         const item = catalog.find((c) => c.id === call.input.catalog_item_id);
         if (!item) continue;
+
+        // Même filet de sécurité, appliqué au prix réellement accordé par le
+        // modèle avant de générer/envoyer le lien de paiement — indépendant
+        // de ce que le texte disait, car un prix invalide peut arriver même
+        // si le texte libre était propre.
+        const offerReview = reviewOfferInput({ item, agreedPrice: call.input.agreed_price, settings });
+        if (!offerReview.ok) {
+          console.error(`⚠️ Filtre de sécurité (offre) déclenché pour fan ${fan.id}:`, offerReview.reasons);
+          await logSafetyIncident({
+            fan_id: fan.id,
+            reasons: offerReview.reasons,
+            flagged_text: `send_offer ${JSON.stringify(call.input)}`,
+          });
+          await setFanPaused(fan.id, true);
+          await replyToFan({ settings, chatId, fan, text: FALLBACK_MESSAGE });
+          await maybeAlertAdmin(
+            settings,
+            `🚨 Alerte sécurité: offre bloquée pour ${fan.telegram_username || fan.first_name || fan.telegram_user_id}\nRaisons: ${offerReview.reasons.join('; ')}\nLa conversation a été mise en PAUSE automatiquement — va voir le dashboard pour reprendre la main.`
+          );
+          continue;
+        }
 
         // On ne bloque plus le renvoi d'un lien déjà envoyé : on n'a aucune
         // confirmation réelle de paiement côté Dropp.fans (pas de webhook), donc
@@ -334,6 +405,44 @@ app.get('/api/admin/fans/:id/messages', requireAdminToken, async (req, res) => {
   }
 });
 
+// ---------- API Admin: pause / reprise de l'IA sur UNE conversation précise ----------
+app.put('/api/admin/fans/:id/pause', requireAdminToken, async (req, res) => {
+  try {
+    const paused = !!req.body.paused;
+    await setFanPaused(req.params.id, paused);
+    res.json({ ok: true, paused });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: envoi manuel d'un message par Bryan/Meely, via l'identité
+// Telegram du bot — pensé pour être utilisé pendant qu'une conversation est en
+// pause, pour reprendre la main personnellement sur un cas intéressant/sensible.
+app.post('/api/admin/fans/:id/message', requireAdminToken, async (req, res) => {
+  try {
+    const text = (req.body.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'texte manquant' });
+    const [fan, settings] = await Promise.all([getFanById(req.params.id), getSettings()]);
+    if (!fan) return res.status(404).json({ error: 'fan introuvable' });
+    await sendMessage(settings.telegram_bot_token, fan.telegram_user_id, text);
+    await logMessage(fan.id, 'assistant', text);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: incidents de sécurité (texte/offre bloqués automatiquement
+// par le filtre serveur — voir lib/safetyFilter.js) ----------
+app.get('/api/admin/safety-incidents', requireAdminToken, async (req, res) => {
+  try {
+    res.json(await listSafetyIncidents(50));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: simulateur de conversation (sans Telegram) ----------
 app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
   try {
@@ -349,7 +458,26 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
       fan: fakeFan,
     });
     const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
-    res.json({ text, bubbles, toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })) });
+
+    // Même filtre de sécurité qu'en prod (voir handleIncomingMessage), mais en
+    // mode "aperçu" seulement : rien n'est bloqué ni mis en pause ici, ça sert
+    // juste à tester/ajuster le script sans attendre qu'un vrai fan tombe dessus.
+    const safety = reviewOutgoingText({ text, catalog, settings });
+    const reasons = [...safety.reasons];
+    toolCalls.forEach((c) => {
+      if (c.name !== 'send_offer') return;
+      const item = catalog.find((i) => i.id === c.input.catalog_item_id);
+      if (!item) return;
+      const offerReview = reviewOfferInput({ item, agreedPrice: c.input.agreed_price, settings });
+      if (!offerReview.ok) reasons.push(...offerReview.reasons);
+    });
+
+    res.json({
+      text,
+      bubbles,
+      toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })),
+      safety: { ok: reasons.length === 0, reasons },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

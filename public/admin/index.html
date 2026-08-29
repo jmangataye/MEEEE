@@ -166,6 +166,11 @@
   .thread-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
   .thread-header{padding:14px 18px;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;gap:10px}
   .thread{padding:16px 18px;max-height:calc(100vh - 270px);overflow-y:auto;display:flex;flex-direction:column;gap:9px}
+  .composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border-soft);background:var(--surface-2)}
+  .composer input{flex:1}
+  .safety-item{padding:9px 0;border-bottom:1px solid var(--border-soft)}
+  .safety-item:last-child{border-bottom:none}
+  .msg.warn-msg{background:var(--red-soft);color:var(--red);border:1px solid rgba(248,113,113,.3);align-self:stretch;max-width:100%;font-size:.78rem}
   .msg{max-width:72%;padding:9px 13px;border-radius:14px;font-size:.86rem;line-height:1.35;white-space:pre-wrap}
   .msg.fan{align-self:flex-start;background:var(--surface-2);border-bottom-left-radius:4px}
   .msg.assistant{align-self:flex-end;background:linear-gradient(135deg,rgba(244,183,64,.22),rgba(255,138,92,.22));
@@ -294,11 +299,20 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor" stroke="none"/></svg>
         <div>Cette liste se rafraîchit automatiquement toutes les <strong>5 secondes</strong>. L'anneau autour de chaque avatar indique le statut du fan.</div>
       </div>
+      <div class="panel" id="safetyPanel" style="display:none">
+        <h3>🚨 Alertes de sécurité récentes</h3>
+        <p class="muted" style="margin-top:-6px">Réponses ou offres bloquées automatiquement par le filtre serveur (contenu hors catalogue, prix inventé, méthode de paiement non autorisée). La conversation concernée est mise en pause automatiquement.</p>
+        <div id="safetyList"></div>
+      </div>
       <div class="live-layout">
         <div class="fan-list" id="fanList"></div>
         <div class="thread-card">
           <div class="thread-header muted" id="fanHeader">Sélectionne un fan à gauche</div>
           <div class="thread" id="thread"></div>
+          <div class="composer" id="composerWrap" style="display:none">
+            <input id="composerInput" placeholder="Écris toi-même à ce fan pendant que l'IA est en pause..." onkeydown="if(event.key==='Enter')sendManualMessage()" />
+            <button class="btn btn-primary btn-sm" onclick="sendManualMessage()">Envoyer</button>
+          </div>
         </div>
       </div>
     </div>
@@ -462,7 +476,10 @@ function showTab(name){
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).style.display = 'block';
   document.querySelector(`.nav-btn[data-tab="${name}"]`).classList.add('active');
-  if (name === 'live') { loadFans(); if (!liveTimer) liveTimer = setInterval(loadFans, 5000); }
+  if (name === 'live') {
+    loadFans(); loadSafetyIncidents();
+    if (!liveTimer) liveTimer = setInterval(() => { loadFans(); loadSafetyIncidents(); }, 5000);
+  }
   else if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
 }
 
@@ -682,11 +699,11 @@ async function loadFans(){
   const fans = await api('/api/admin/fans');
   document.getElementById('fanList').innerHTML = fans.map(f => `
     <div class="fan-item ${f.id===selectedFanId?'active':''}" onclick="openFan('${f.id}')">
-      <div class="avatar" style="box-shadow:0 0 0 2px ${STATUS_COLORS[f.status]||STATUS_COLORS.new}">${initials(f)}</div>
+      <div class="avatar" style="box-shadow:0 0 0 2px ${f.paused ? 'var(--red)' : (STATUS_COLORS[f.status]||STATUS_COLORS.new)}">${initials(f)}</div>
       <div class="meta">
         <div class="name-row">
           <span class="name">${f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id)}</span>
-          <span class="pill pill-${f.status}">${f.status}</span>
+          ${f.paused ? '<span class="pill pill-off">⏸ pausé</span>' : `<span class="pill pill-${f.status}">${f.status}</span>`}
         </div>
         <div class="preview">${f.last_message ? (f.last_message.role==='fan'?'':'→ ') + f.last_message.content : ''}</div>
       </div>
@@ -705,14 +722,49 @@ async function openFan(id){
 async function loadThread(id, silent){
   const data = await api('/api/admin/fans/'+id+'/messages');
   const f = data.fan;
-  document.getElementById('fanHeader').innerHTML = `<strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong> &nbsp;<span class="pill pill-${f.status}">${f.status}</span> &nbsp;${fmtMoney(f.total_spent)} envoyés ${f.memory_notes ? '<br><span class="muted">🧠 '+f.memory_notes+'</span>' : ''}`;
+  document.getElementById('fanHeader').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;flex-wrap:wrap">
+      <div><strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong> &nbsp;<span class="pill pill-${f.status}">${f.status}</span> &nbsp;${fmtMoney(f.total_spent)} envoyés ${f.memory_notes ? '<br><span class="muted">🧠 '+f.memory_notes+'</span>' : ''}</div>
+      <button class="btn ${f.paused ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="togglePause('${f.id}', ${!f.paused})">${f.paused ? "▶️ Reprendre l'IA" : '⏸ Mettre en pause'}</button>
+    </div>
+  `;
   document.getElementById('thread').innerHTML = data.messages.map(m => `<div class="msg ${m.role==='fan'?'fan':'assistant'}">${m.content}</div>`).join('');
+  document.getElementById('composerWrap').style.display = f.paused ? 'flex' : 'none';
+}
+
+async function togglePause(id, paused){
+  await api('/api/admin/fans/'+id+'/pause', { method:'PUT', body: JSON.stringify({ paused }) });
+  loadThread(id);
+  loadFans();
+}
+
+async function sendManualMessage(){
+  const input = document.getElementById('composerInput');
+  const text = input.value.trim();
+  if (!text || !selectedFanId) return;
+  input.value = '';
+  await api('/api/admin/fans/'+selectedFanId+'/message', { method:'POST', body: JSON.stringify({ text }) });
+  loadThread(selectedFanId, true);
+}
+
+async function loadSafetyIncidents(){
+  const incidents = await api('/api/admin/safety-incidents');
+  const panel = document.getElementById('safetyPanel');
+  if (!incidents || !incidents.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('safetyList').innerHTML = incidents.slice(0, 10).map(i => `
+    <div class="safety-item">
+      <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}</div>
+      <div style="font-size:.82rem">${(i.reasons||[]).join('; ')}</div>
+      <div class="muted" style="font-size:.78rem;font-style:italic">"${(i.flagged_text||'').slice(0,180)}"</div>
+    </div>
+  `).join('');
 }
 
 // ---- Test / simulateur ----
 function renderTestThread(){
   document.getElementById('testThread').innerHTML = testHistory.map(m =>
-    `<div class="msg ${m.role==='fan'?'fan':'assistant'}">${m.content}</div>`
+    `<div class="msg ${m.warn ? 'warn-msg' : (m.role==='fan'?'fan':'assistant')}">${m.content}</div>`
   ).join('');
 }
 
@@ -730,6 +782,9 @@ async function sendTestMessage(){
   (res.toolCalls || []).forEach(tc => {
     testHistory.push({ role: 'assistant', content: `⚙️ [${tc.name}] ${JSON.stringify(tc.input)}` });
   });
+  if (res.safety && !res.safety.ok) {
+    testHistory.push({ role: 'assistant', content: `⚠️ LE FILTRE DE SÉCURITÉ AURAIT BLOQUÉ CECI EN PROD (fan mis en pause auto): ${res.safety.reasons.join('; ')}`, warn: true });
+  }
   renderTestThread();
 }
 
