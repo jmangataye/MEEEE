@@ -41,6 +41,7 @@ const {
   getAiUsageSince,
   setAiCreditBalance,
   getLiveOpsStats,
+  getStalledConversations,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
@@ -487,6 +488,26 @@ async function handleIncomingMessage(msg, opts = {}) {
     }
   } catch (err) {
     console.error('Erreur traitement message fan:', err);
+    // Avant : en cas d'erreur (ex: appel Anthropic qui expire), le fan
+    // n'avait ABSOLUMENT aucune réponse et rien ne le distinguait d'un fan
+    // qui n'a simplement pas encore été traité — silence total, découvert en
+    // creusant le 29/08. On tente maintenant un message de repli minimal
+    // (best-effort : si même ça échoue, on abandonne sans relancer d'erreur)
+    // — et le panneau "En attente de révision" du dashboard (voir
+    // getStalledConversations) reste le filet de sécurité si même ce message
+    // de repli ne part pas.
+    try {
+      const fallbackSettings = await getSettings().catch(() => null);
+      if (fallbackSettings && msg && msg.chat && msg.chat.id) {
+        await sendMessage(
+          fallbackSettings.telegram_bot_token,
+          msg.chat.id,
+          'uy se me trabo un momentico, ya te respondo 🙏'
+        );
+      }
+    } catch (fallbackErr) {
+      console.error('Erreur envoi message de repli après échec de traitement:', fallbackErr);
+    }
   }
 }
 
@@ -601,6 +622,21 @@ app.post('/api/admin/fans/:id/message', requireAdminToken, async (req, res) => {
 app.get('/api/admin/safety-incidents', requireAdminToken, async (req, res) => {
   try {
     res.json(await listSafetyIncidents(50));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: "En attente de révision" — conversations où le fan a
+// écrit en dernier, l'IA n'est pas en pause, et pourtant rien n'a été
+// renvoyé depuis plus de quelques minutes (voir getStalledConversations).
+// Sert d'alerte visible sur le dashboard pour que Bryan/Meely puisse
+// intervenir manuellement quand le bot "arrête de répondre" pour x ou y
+// raison — peu importe la cause exacte.
+app.get('/api/admin/stalled-conversations', requireAdminToken, async (req, res) => {
+  try {
+    const minutes = Math.max(1, Number(req.query.minutes) || 5);
+    res.json(await getStalledConversations(minutes));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -786,9 +822,13 @@ const AI_OUTPUT_PRICE_PER_MTOK = 15;
 app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
   try {
     const settings = await getSettings();
-    const [dbStats, usage] = await Promise.all([
+    const [dbStats, usage, stalled] = await Promise.all([
       getLiveOpsStats(),
       getAiUsageSince(settings.ai_credit_balance_updated_at || null),
+      getStalledConversations(5).catch((err) => {
+        console.error('Erreur calcul conversations en attente de révision:', err.message);
+        return [];
+      }),
     ]);
     const spentUsd =
       (usage.input / 1e6) * AI_INPUT_PRICE_PER_MTOK + (usage.output / 1e6) * AI_OUTPUT_PRICE_PER_MTOK;
@@ -797,6 +837,7 @@ app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
 
     res.json({
       ...dbStats,
+      stalledCount: stalled.length,
       queueSize: fanQueues.size,
       uptimeSeconds: Math.floor(process.uptime()),
       aiCredit: {

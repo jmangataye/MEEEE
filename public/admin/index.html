@@ -117,6 +117,8 @@
       padding:13px 14px;display:flex;flex-direction:column;gap:4px}
   .live-cell .lv{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
   .live-cell .ll{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .live-cell.warn{border-color:rgba(244,183,64,.4);background:rgba(244,183,64,.08)}
+  .live-cell.warn .lv{color:var(--accent)}
   .credit-block{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);padding:16px}
   .credit-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
   .credit-head .amt{font-size:1.3rem;font-weight:800}
@@ -221,7 +223,9 @@
   /* ---------- live / conversations ---------- */
   .live-layout{display:grid;grid-template-columns:290px 1fr;gap:16px}
   .fan-list{max-height:calc(100vh - 200px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
-  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);cursor:pointer}
+  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;cursor:pointer}
+  .fan-item.potential-hot{border-left-color:var(--green)}
+  .fan-item.potential-cold{border-left-color:var(--blue)}
   .fan-item:hover{background:var(--surface-2)}
   .fan-item.active{background:var(--accent-soft)}
   .avatar{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:flex;align-items:center;justify-content:center;
@@ -312,6 +316,9 @@
       border-radius:999px;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .12s}
   .subtab-btn:hover{color:var(--text);border-color:var(--muted-2)}
   .subtab-btn.active{background:var(--accent-soft);border-color:rgba(244,183,64,.4);color:var(--accent)}
+  .persona-savebar{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:14px;
+      flex-wrap:wrap;background:var(--surface);border:1px solid rgba(244,183,64,.35);border-radius:var(--radius-sm);
+      padding:10px 14px;margin-bottom:18px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 
   /* ---------- toggle switch ---------- */
   .switch-row{display:flex;align-items:center;gap:10px}
@@ -503,6 +510,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor" stroke="none"/></svg>
         <div>Cette liste se rafraîchit automatiquement toutes les <strong>5 secondes</strong>. L'anneau autour de chaque avatar indique le statut du fan.</div>
       </div>
+      <div class="panel" id="stalledPanel" style="display:none">
+        <h3>⏳ En attente de révision</h3>
+        <p class="muted" style="margin-top:-6px">Le fan a écrit en dernier, l'IA n'est pas en pause, mais aucune réponse n'est partie depuis plusieurs minutes — la conversation semble bloquée. Clique pour l'ouvrir et reprendre la main.</p>
+        <div id="stalledList"></div>
+      </div>
       <div class="panel" id="safetyPanel" style="display:none">
         <h3>🚨 Alertes de sécurité récentes</h3>
         <p class="muted" style="margin-top:-6px">Réponses ou offres bloquées automatiquement par le filtre serveur (contenu hors catalogue, prix inventé, méthode de paiement non autorisée). La conversation concernée est mise en pause automatiquement.</p>
@@ -568,6 +580,11 @@
         <button class="subtab-btn" data-psec="contenu" onclick="showPersonaSection('contenu')">Contenu</button>
         <button class="subtab-btn" data-psec="prix" onclick="showPersonaSection('prix')">Prix</button>
         <button class="subtab-btn" data-psec="alertes" onclick="showPersonaSection('alertes')">Rythme &amp; alertes</button>
+      </div>
+
+      <div class="persona-savebar">
+        <span class="muted" style="font-size:.78rem">Ce bouton enregistre <strong style="color:var(--text)">toutes les sections</strong>, peu importe celle affichée en ce moment.<br/><span id="personaSaveStatus"></span></span>
+        <button class="btn btn-primary btn-sm" id="personaSaveBtn" onclick="saveSettings()">💾 Enregistrer</button>
       </div>
 
       <div class="persona-section" data-psec-panel="identite">
@@ -832,8 +849,8 @@ function showTab(name){
   document.getElementById('tab-' + name).style.display = 'block';
   document.querySelector(`.nav-btn[data-tab="${name}"]`).classList.add('active');
   if (name === 'live') {
-    loadFans(); loadSafetyIncidents();
-    if (!liveTimer) liveTimer = setInterval(() => { loadFans(); loadSafetyIncidents(); }, 5000);
+    loadFans(); loadSafetyIncidents(); loadStalledConversations();
+    if (!liveTimer) liveTimer = setInterval(() => { loadFans(); loadSafetyIncidents(); loadStalledConversations(); }, 5000);
   } else if (liveTimer) {
     clearInterval(liveTimer); liveTimer = null;
   }
@@ -903,13 +920,14 @@ async function loadLiveOps(){
     { key:'active1h', lv: s.active1h, ll: 'Chats actifs (1h)' },
     { key:'active24h', lv: s.active24h, ll: 'Chats actifs (24h)' },
     { key:'pausedCount', lv: s.pausedCount, ll: 'IA en pause' },
+    { key:'stalledCount', lv: s.stalledCount, ll: '⏳ En attente de révision' },
     { key:'messagesToday', lv: s.messagesToday, ll: 'Messages aujourd\'hui' },
     { key:'safetyToday', lv: s.safetyToday, ll: 'Incidents sécurité (jour)' },
     { key:'queueSize', lv: s.queueSize, ll: 'File d\'attente' },
     { key:'uptime', lv: fmtUptime(s.uptimeSeconds), ll: 'Bot en ligne depuis', text: true },
   ];
   document.getElementById('liveOpsGrid').innerHTML = cells.map(c => `
-    <div class="live-cell" id="live-cell-${c.key}"><div class="lv" id="live-lv-${c.key}">${c.text ? c.lv : 0}</div><div class="ll">${c.ll}</div></div>
+    <div class="live-cell${c.key==='stalledCount' && c.lv > 0 ? ' warn' : ''}" id="live-cell-${c.key}"${c.key==='stalledCount' ? ' style="cursor:pointer" onclick="showTab(\'live\')"' : ''}><div class="lv" id="live-lv-${c.key}">${c.text ? c.lv : 0}</div><div class="ll">${c.ll}</div></div>
   `).join('');
 
   const nextValues = {};
@@ -1065,8 +1083,25 @@ async function saveSettings(){
   const payload = {};
   fields.forEach(f => payload[f] = document.getElementById(f).value);
   numFields.forEach(f => payload[f] = parseFloat(document.getElementById(f).value));
-  await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(payload) });
-  showToast('Réglages enregistrés ✅');
+
+  const statusEl = document.getElementById('personaSaveStatus');
+  const btn = document.getElementById('personaSaveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Enregistrement...'; }
+  try {
+    const result = await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(payload) });
+    // `api()` ne lève une erreur que sur 401 — une erreur serveur (500, validation,
+    // etc.) renvoie quand même un JSON, donc sans cette vérification explicite on
+    // affichait "Réglages enregistrés ✅" même quand l'enregistrement avait échoué.
+    // C'est exactement le souci signalé : aucune vraie confirmation fiable.
+    if (result && result.error) throw new Error(result.error);
+    showToast('Réglages enregistrés ✅');
+    if (statusEl) statusEl.innerHTML = `✅ Dernière sauvegarde : ${new Date().toLocaleTimeString('fr-FR')}`;
+  } catch (err) {
+    showToast('Échec de l\'enregistrement : ' + err.message, true);
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">❌ Échec de la sauvegarde (${new Date().toLocaleTimeString('fr-FR')}) — réessaie</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Enregistrer'; }
+  }
 }
 
 const TONE_PRESETS = {
@@ -1518,7 +1553,7 @@ async function loadFans(){
     // coup d'œil sans avoir à ouvrir chaque conversation.
     const needsAttention = f.paused && f.last_message && f.last_message.role === 'fan';
     return `
-    <div class="fan-item ${f.id===selectedFanId?'active':''}" onclick="openFan('${f.id}')">
+    <div class="fan-item ${f.id===selectedFanId?'active':''} ${f.potential==='potencial'?'potential-hot':f.potential==='sin_potencial'?'potential-cold':''}" onclick="openFan('${f.id}')">
       <div class="avatar" style="box-shadow:0 0 0 2px ${f.paused ? 'var(--red)' : (STATUS_COLORS[f.status]||STATUS_COLORS.new)}">${initials(f)}</div>
       <div class="meta">
         <div class="name-row">
@@ -1546,9 +1581,9 @@ async function loadThread(id, silent){
   document.getElementById('fanHeader').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;flex-wrap:wrap">
       <div>
-        <strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong>
+        ${potentialBadge(f.potential)}
+        &nbsp;<strong style="color:var(--text)">${f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id}</strong>
         &nbsp;<span class="pill pill-${f.status}">${f.status}</span>
-        &nbsp;${potentialBadge(f.potential)}
         &nbsp;<span class="muted">${fmtMoney(f.total_spent)} envoyés</span>
       </div>
       <button class="btn ${f.paused ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="togglePause('${f.id}', ${!f.paused})">${f.paused ? "▶️ Reprendre l'IA" : '⏸ Mettre en pause'}</button>
@@ -1599,6 +1634,27 @@ async function loadSafetyIncidents(){
       <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}</div>
       <div style="font-size:.82rem">${(i.reasons||[]).join('; ')}</div>
       <div class="muted" style="font-size:.78rem;font-style:italic">"${(i.flagged_text||'').slice(0,180)}"</div>
+    </div>
+  `).join('');
+}
+
+function fmtMinutesAgo(min){
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h < 24) return `il y a ${h}h${m ? ' '+m+'min' : ''}`;
+  return `il y a ${Math.floor(h/24)}j`;
+}
+
+async function loadStalledConversations(){
+  let stalled;
+  try { stalled = await api('/api/admin/stalled-conversations'); } catch(e) { return; }
+  const panel = document.getElementById('stalledPanel');
+  if (!stalled || !stalled.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('stalledList').innerHTML = stalled.slice(0, 15).map(s => `
+    <div class="safety-item" style="cursor:pointer" onclick="showTab('live');openFan('${s.fan_id}')">
+      <div class="muted" style="font-size:.72rem">${fmtMinutesAgo(s.minutes_since)} — ${s.telegram_username ? '@'+s.telegram_username : (s.first_name || s.telegram_user_id)}</div>
+      <div class="muted" style="font-size:.78rem;font-style:italic">"${(s.last_message||'').slice(0,180)}"</div>
     </div>
   `).join('');
 }
