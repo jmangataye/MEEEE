@@ -368,7 +368,9 @@ async function sendTestMessage(){
   renderTestThread();
   input.value = '';
   const res = await api('/api/admin/test-chat', { method: 'POST', body: JSON.stringify({ message, history: testHistory.slice(0, -1) }) });
-  if (res.text) testHistory.push({ role: 'assistant', content: res.text });
+  (res.bubbles && res.bubbles.length ? res.bubbles : (res.text ? [res.text] : [])).forEach(b => {
+    testHistory.push({ role: 'assistant', content: b });
+  });
   (res.toolCalls || []).forEach(tc => {
     testHistory.push({ role: 'assistant', content: `⚙️ [${tc.name}] ${JSON.stringify(tc.input)}` });
   });

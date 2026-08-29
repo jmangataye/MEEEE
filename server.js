@@ -42,12 +42,32 @@ async function requireAdminToken(req, res, next) {
   next();
 }
 
+// Coupe la réponse en plusieurs "bulles" (séparées par une ligne vide) envoyées
+// l'une après l'autre, comme le ferait vraiment quelqu'un qui tape plusieurs
+// messages à la suite — plutôt qu'un seul gros pavé de texte qui sonne robotique.
+function splitIntoBubbles(text) {
+  return text
+    .split(/\n\s*\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// Nettoyage défensif : au cas où le modèle utilise quand même ¿/¡, on les
+// retire pour garder un style de chat casuel (personne n'écrit "¿cómo estás?"
+// sur son téléphone, juste "como estas?").
+function stripInvertedPunctuation(text) {
+  return text.replace(/¿/g, '').replace(/¡/g, '');
+}
+
 async function replyToFan({ settings, chatId, fan, text }) {
-  await sendMessageWithTypingDelay(settings.telegram_bot_token, chatId, text, {
-    minSeconds: settings.response_delay_min_seconds,
-    maxSeconds: settings.response_delay_max_seconds,
-  });
-  await logMessage(fan.id, 'assistant', text);
+  const bubbles = splitIntoBubbles(text).map(stripInvertedPunctuation);
+  for (const bubble of bubbles) {
+    await sendMessageWithTypingDelay(settings.telegram_bot_token, chatId, bubble, {
+      minSeconds: settings.response_delay_min_seconds,
+      maxSeconds: settings.response_delay_max_seconds,
+    });
+    await logMessage(fan.id, 'assistant', bubble);
+  }
 }
 
 async function maybeAlertAdmin(settings, text) {
@@ -84,11 +104,7 @@ app.post('/telegram/webhook', async (req, res) => {
       const intro = introTemplate
         .replace('{persona_name}', settings.persona_name)
         .replace('{creator_name}', settings.creator_name);
-      await sendMessageWithTypingDelay(settings.telegram_bot_token, chatId, intro, {
-        minSeconds: settings.response_delay_min_seconds,
-        maxSeconds: settings.response_delay_max_seconds,
-      });
-      await logMessage(fan.id, 'assistant', intro);
+      await replyToFan({ settings, chatId, fan, text: intro });
       return;
     }
 
@@ -255,7 +271,8 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
       fanMessage: message,
       fan: fakeFan,
     });
-    res.json({ text, toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })) });
+    const bubbles = splitIntoBubbles(text).map(stripInvertedPunctuation);
+    res.json({ text, bubbles, toolCalls: toolCalls.map((c) => ({ name: c.name, input: c.input })) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
