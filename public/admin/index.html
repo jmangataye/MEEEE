@@ -34,7 +34,12 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased}
+  body{margin:0;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;-webkit-font-smoothing:antialiased;
+      background:
+        radial-gradient(1100px 620px at 14% -8%, rgba(244,183,64,.10), transparent 60%),
+        radial-gradient(900px 560px at 100% 0%, rgba(167,139,250,.08), transparent 55%),
+        var(--bg);
+      background-attachment:fixed}
   a{color:var(--blue);text-decoration:none}
   a:hover{text-decoration:underline}
   ::selection{background:var(--accent-soft)}
@@ -65,14 +70,18 @@
   .nav-foot{margin-top:auto;padding:10px 8px 2px;font-size:.68rem;color:var(--muted-2);border-top:1px solid var(--border-soft)}
 
   main{flex:1;padding:28px 34px 60px;max-width:1180px}
-  .page-head{margin-bottom:22px}
-  .page-head h2{margin:0 0 4px;font-size:1.4rem;font-weight:800;letter-spacing:-.01em}
+  .page-head{margin-bottom:22px;position:relative;padding-bottom:16px}
+  .page-head::after{content:"";position:absolute;left:0;bottom:0;width:64px;height:3px;border-radius:3px;
+      background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+  .page-head h2{margin:0 0 4px;font-size:1.5rem;font-weight:800;letter-spacing:-.015em}
   .page-head p{margin:0;color:var(--muted);font-size:.86rem}
 
   /* ---------- stat cards ---------- */
   .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:26px}
-  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;
-      display:flex;flex-direction:column;gap:10px}
+  .stat-card{background:linear-gradient(180deg,var(--surface-hover),var(--surface));border:1px solid var(--border);
+      border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:10px;
+      transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+  .stat-card:hover{transform:translateY(-3px);box-shadow:0 14px 32px rgba(0,0,0,.32);border-color:var(--border-soft)}
   .stat-top{display:flex;align-items:center;justify-content:space-between}
   .stat-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center}
   .stat-icon svg{width:17px;height:17px}
@@ -80,9 +89,33 @@
   .stat-label{color:var(--muted);font-size:.74rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 
   /* ---------- panels / cards ---------- */
-  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:20px}
-  .panel h3{margin:0 0 14px;font-size:1rem;font-weight:700}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:20px;
+      box-shadow:0 1px 0 rgba(255,255,255,.02) inset;transition:border-color .15s ease}
+  .panel h3{margin:0 0 14px;font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px}
   .panel-sub{color:var(--muted);font-size:.8rem;margin:-8px 0 16px}
+
+  /* ---------- live ops (panneau temps réel, Vue d'ensemble) ---------- */
+  .live-ops{position:relative;overflow:hidden;border:1px solid rgba(52,211,153,.28);
+      background:linear-gradient(160deg,rgba(52,211,153,.07),var(--surface) 55%)}
+  .live-ops-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .live-ops-title{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1rem}
+  .live-dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:0 0 9px;position:relative}
+  .live-dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;background:var(--green);opacity:.35;
+      animation:live-pulse 1.8s ease-out infinite}
+  @keyframes live-pulse{0%{transform:scale(.6);opacity:.5}100%{transform:scale(2.2);opacity:0}}
+  .live-ops-updated{font-size:.72rem;color:var(--muted-2)}
+  .live-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+  .live-cell{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);
+      padding:13px 14px;display:flex;flex-direction:column;gap:4px}
+  .live-cell .lv{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
+  .live-cell .ll{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .credit-block{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);padding:16px}
+  .credit-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .credit-head .amt{font-size:1.3rem;font-weight:800}
+  .credit-bar-track{height:9px;border-radius:6px;background:var(--surface);border:1px solid var(--border-soft);overflow:hidden}
+  .credit-bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--accent));transition:width .3s ease}
+  .credit-bar-fill.low{background:linear-gradient(90deg,var(--accent-2),var(--red))}
+  .credit-note{font-size:.72rem;color:var(--muted-2);margin-top:8px;line-height:1.4}
 
   label{display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin:12px 0 5px;letter-spacing:.01em}
   input,textarea,select{width:100%;padding:9px 11px;background:var(--bg-soft);border:1px solid var(--border);
@@ -93,12 +126,15 @@
   .row > div{flex:1;min-width:160px}
 
   button.btn{cursor:pointer;border:none;border-radius:var(--radius-sm);padding:9px 16px;font-weight:700;
-      font-size:.83rem;font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:filter .12s,background .12s}
+      font-size:.83rem;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+      transition:filter .12s,background .12s,transform .12s,box-shadow .12s}
   button.btn svg{width:14px;height:14px}
-  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#181000}
-  .btn-primary:hover{filter:brightness(1.06)}
+  button.btn:active{transform:translateY(1px)}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#181000;
+      box-shadow:0 4px 14px rgba(244,183,64,.22)}
+  .btn-primary:hover{filter:brightness(1.06);box-shadow:0 6px 18px rgba(244,183,64,.3)}
   .btn-ghost{background:var(--surface-2);border:1px solid var(--border);color:var(--text)}
-  .btn-ghost:hover{background:var(--surface-hover)}
+  .btn-ghost:hover{background:var(--surface-hover);border-color:var(--muted-2)}
   .btn-danger{background:var(--red-soft);border:1px solid rgba(248,113,113,.3);color:var(--red)}
   .btn-danger:hover{background:rgba(248,113,113,.2)}
   .btn-sm{padding:6px 11px;font-size:.75rem}
@@ -135,7 +171,8 @@
   /* ---------- catalogue ---------- */
   .catalog-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:22px}
   .catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;
-      display:flex;flex-direction:column;gap:8px}
+      display:flex;flex-direction:column;gap:8px;transition:transform .16s ease,box-shadow .16s ease}
+  .catalog-card:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(0,0,0,.3)}
   .catalog-card.off{opacity:.55}
   .catalog-card h4{margin:0;font-size:1rem;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .catalog-card .price{font-weight:800;font-size:1.15rem;color:var(--accent);margin-top:2px}
@@ -294,6 +331,16 @@
     <!-- VUE D'ENSEMBLE -->
     <div class="tab-content" id="tab-overview">
       <div class="page-head"><h2>Vue d'ensemble</h2><p>Performance globale du bot, campagnes et test A/B.</p></div>
+
+      <div class="panel live-ops">
+        <div class="live-ops-head">
+          <div class="live-ops-title"><span class="live-dot"></span> Live Ops — temps réel</div>
+          <div class="live-ops-updated" id="liveOpsUpdated"></div>
+        </div>
+        <div class="live-grid" id="liveOpsGrid"></div>
+        <div class="credit-block" id="creditBlock"></div>
+      </div>
+
       <div class="stat-grid" id="stats"></div>
 
       <div class="panel">
@@ -557,6 +604,7 @@
 <script>
 let TOKEN = localStorage.getItem('meeli_admin_token') || '';
 let liveTimer = null;
+let overviewTimer = null;
 let selectedFanId = null;
 let testHistory = [];
 
@@ -595,6 +643,12 @@ function showTab(name){
   } else if (liveTimer) {
     clearInterval(liveTimer); liveTimer = null;
   }
+  if (name === 'overview') {
+    loadLiveOps();
+    if (!overviewTimer) overviewTimer = setInterval(loadLiveOps, 10000);
+  } else if (overviewTimer) {
+    clearInterval(overviewTimer); overviewTimer = null;
+  }
   if (name === 'sales') loadSales();
   if (name === 'persona') loadVault();
 }
@@ -603,10 +657,77 @@ async function boot(){
   if (!TOKEN) return;
   try {
     await loadSettings();
-    await Promise.all([loadStats(), loadCatalog(), loadAdmins(), loadTimeseries()]);
+    await Promise.all([loadStats(), loadCatalog(), loadAdmins(), loadTimeseries(), loadLiveOps()]);
     document.getElementById('gate').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    if (!overviewTimer) overviewTimer = setInterval(loadLiveOps, 10000);
   } catch(e) { console.error(e); }
+}
+
+// ---- Live Ops (panneau temps réel, Vue d'ensemble) ----
+function fmtUptime(sec){
+  sec = Number(sec) || 0;
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return `${d}j ${h}h`;
+  if (h > 0) return `${h}h ${m}min`;
+  return `${m}min`;
+}
+
+async function loadLiveOps(){
+  let s;
+  try { s = await api('/api/admin/live-stats'); } catch(e) { return; }
+  document.getElementById('liveOpsUpdated').textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR');
+
+  const cells = [
+    { lv: s.active1h, ll: 'Chats actifs (1h)' },
+    { lv: s.active24h, ll: 'Chats actifs (24h)' },
+    { lv: s.pausedCount, ll: 'IA en pause' },
+    { lv: s.messagesToday, ll: 'Messages aujourd\'hui' },
+    { lv: s.safetyToday, ll: 'Incidents sécurité (jour)' },
+    { lv: s.queueSize, ll: 'File d\'attente' },
+    { lv: fmtUptime(s.uptimeSeconds), ll: 'Bot en ligne depuis' },
+  ];
+  document.getElementById('liveOpsGrid').innerHTML = cells.map(c => `
+    <div class="live-cell"><div class="lv">${c.lv ?? 0}</div><div class="ll">${c.ll}</div></div>
+  `).join('');
+
+  const cr = s.aiCredit || {};
+  const creditBlock = document.getElementById('creditBlock');
+  if (cr.balance == null) {
+    creditBlock.innerHTML = `
+      <div class="credit-head"><strong>Crédit IA (Claude)</strong></div>
+      <p class="muted" style="margin:0 0 10px">Aucun solde de départ renseigné — saisis-le juste après une recharge pour voir une estimation du crédit restant ici.</p>
+      <div class="row" style="margin:0">
+        <div><label style="margin-top:0">Solde actuel (USD, après recharge)</label><input id="creditBalanceInput" type="number" step="0.01" placeholder="ex: 50" /></div>
+        <div style="flex:0"><button class="btn btn-primary" onclick="updateCreditBalance()">Enregistrer</button></div>
+      </div>
+    `;
+  } else {
+    const pct = cr.estimatedRemaining != null && cr.balance > 0 ? Math.max(0, Math.min(100, (cr.estimatedRemaining / cr.balance) * 100)) : 0;
+    const low = pct < 20;
+    creditBlock.innerHTML = `
+      <div class="credit-head">
+        <strong>Crédit IA (Claude) — estimation</strong>
+        <span class="amt">$${cr.estimatedRemaining?.toFixed(2)} <span class="muted" style="font-size:.7rem;font-weight:600">/ $${Number(cr.balance).toFixed(2)}</span></span>
+      </div>
+      <div class="credit-bar-track"><div class="credit-bar-fill ${low ? 'low' : ''}" style="width:${pct}%"></div></div>
+      <div class="credit-note">
+        Estimation basée sur les tokens réellement consommés depuis le ${cr.balanceUpdatedAt ? new Date(cr.balanceUpdatedAt).toLocaleString('fr-FR') : '—'}
+        (≈ $${cr.estimatedSpentSinceReset?.toFixed(2)} dépensés). Anthropic n'offre pas de solde en temps réel — mets à jour le chiffre ci-dessous après chaque recharge pour garder l'estimation juste.
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label style="margin-top:0">Mettre à jour le solde (après recharge)</label><input id="creditBalanceInput" type="number" step="0.01" placeholder="ex: 50" /></div>
+        <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="updateCreditBalance()">Mettre à jour</button></div>
+      </div>
+    `;
+  }
+}
+
+async function updateCreditBalance(){
+  const val = parseFloat(document.getElementById('creditBalanceInput').value);
+  if (Number.isNaN(val) || val < 0) { alert('Entre un montant valide.'); return; }
+  await api('/api/admin/ai-credit-balance', { method:'PUT', body: JSON.stringify({ amount: val }) });
+  loadLiveOps();
 }
 
 async function loadTimeseries(){

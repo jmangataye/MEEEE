@@ -38,6 +38,9 @@ const {
   addVaultAsset,
   deleteVaultAsset,
   getVaultSummary,
+  getAiUsageSince,
+  setAiCreditBalance,
+  getLiveOpsStats,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
@@ -636,6 +639,64 @@ app.delete('/api/admin/vault/:id', requireAdminToken, async (req, res) => {
   try {
     await deleteVaultAsset(req.params.id);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: "Live Ops" — métriques temps réel pour le panneau en
+// haut de la Vue d'ensemble. Combine des compteurs base de données (chats
+// actifs, pauses, messages/incidents du jour) avec des métriques en mémoire
+// du process (fanQueues, uptime) et une ESTIMATION du crédit IA restant.
+//
+// Important sur le crédit IA : Anthropic n'expose aucune API de solde en
+// temps réel (vérifié — seule une API d'historique d'usage/coût existe, avec
+// des identifiants "Admin API" différents de la clé utilisée par le bot). Ce
+// qui suit est donc une ESTIMATION : solde saisi manuellement par l'admin à
+// chaque recharge, moins le coût des tokens réellement consommés (journalisés
+// à chaque appel Claude — voir lib/claudeAgent.js) depuis cette date, au tarif
+// standard du modèle utilisé (claude-sonnet-4-5 : $3/M tokens en entrée, $15/M
+// tokens en sortie — tarifs vérifiés sur platform.claude.com le 29/08/2026).
+const AI_INPUT_PRICE_PER_MTOK = 3;
+const AI_OUTPUT_PRICE_PER_MTOK = 15;
+
+app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
+  try {
+    const settings = await getSettings();
+    const [dbStats, usage] = await Promise.all([
+      getLiveOpsStats(),
+      getAiUsageSince(settings.ai_credit_balance_updated_at || null),
+    ]);
+    const spentUsd =
+      (usage.input / 1e6) * AI_INPUT_PRICE_PER_MTOK + (usage.output / 1e6) * AI_OUTPUT_PRICE_PER_MTOK;
+    const balance = settings.ai_credit_balance != null ? Number(settings.ai_credit_balance) : null;
+    const estimatedRemaining = balance != null ? Math.max(0, balance - spentUsd) : null;
+
+    res.json({
+      ...dbStats,
+      queueSize: fanQueues.size,
+      uptimeSeconds: Math.floor(process.uptime()),
+      aiCredit: {
+        balance,
+        balanceUpdatedAt: settings.ai_credit_balance_updated_at || null,
+        estimatedSpentSinceReset: Math.round(spentUsd * 100) / 100,
+        estimatedRemaining: estimatedRemaining != null ? Math.round(estimatedRemaining * 100) / 100 : null,
+        tokensSinceReset: usage,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Saisie manuelle du solde de crédit IA (ex: juste après une recharge chez
+// Anthropic) — repart de zéro pour l'estimation ci-dessus.
+app.put('/api/admin/ai-credit-balance', requireAdminToken, async (req, res) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (Number.isNaN(amount) || amount < 0) return res.status(400).json({ error: 'montant invalide' });
+    const updated = await setAiCreditBalance(amount);
+    res.json({ ok: true, balance: updated.ai_credit_balance, updatedAt: updated.ai_credit_balance_updated_at });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
