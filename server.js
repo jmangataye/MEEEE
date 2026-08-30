@@ -239,7 +239,7 @@ async function handleNonTextMessage(msg, mediaType) {
 // continu. Chaque message brut reste journalisé immédiatement à sa réception
 // (le fil du dashboard reste temps réel) — seul le déclenchement de l'appel
 // IA est retardé et regroupé.
-const pendingBatches = new Map(); // fanKey -> { fan, from, chatId, history, texts, firstAt, timer }
+const pendingBatches = new Map(); // fanKey -> { fanPromise, fan, from, chatId, texts, firstAt, timer }
 // 6000ms plutôt que 4000 : repéré le 29/08 qu'un fan envoyant deux messages
 // liés à ~5s d'intervalle (juste au-dessus de l'ancienne fenêtre de 4s)
 // déclenchait DEUX lots séparés au lieu d'un seul — deux appels à Claude qui
@@ -250,18 +250,39 @@ const BATCH_DEBOUNCE_MS = 6000;
 const BATCH_MAX_WAIT_MS = 15000;
 
 async function enqueueFanMessage(fanKey, msg) {
+  // MISE À JOUR 30/08/2026 — bug trouvé en analysant le "flood" de messages
+  // (10-15+ bulles envoyées en rafale pour ce qui semblait être UN seul tour
+  // de fan) : la version précédente faisait `pendingBatches.get(fanKey)` puis,
+  // si absent, un `await getOrCreateFan(...)` AVANT de poser le nouveau lot
+  // dans la Map. Deux messages Telegram arrivant à quelques millisecondes
+  // d'écart (très courant : deux webhooks traités en parallèle) passaient
+  // TOUS LES DEUX le test "lot absent" avant que le premier ait fini de créer
+  // son fan/lot — créant deux lots parallèles pour le même fan, donc deux
+  // appels Claude indépendants qui ne se voient pas, donc deux réponses quasi
+  // dupliquées envoyées coup sur coup. C'est exactement le "bug du double
+  // pitch" déjà repéré sur la conversation d'Adriano (voir audit, 21:51:36 et
+  // 21:51:45) — la fenêtre de debounce ne pouvait rien y faire puisque la
+  // course se jouait AVANT même la pose du minuteur. Fix : réserver la place
+  // dans `pendingBatches` de façon 100% synchrone (aucun `await` entre le
+  // test et le `.set`), et ne faire l'appel réseau `getOrCreateFan` qu'APRÈS,
+  // en gardant sa promesse sur le lot pour que tout message suivant attende
+  // la même résolution au lieu d'en déclencher une deuxième.
   let batch = pendingBatches.get(fanKey);
   if (!batch) {
-    const fan = await getOrCreateFan({
+    batch = { fanPromise: null, fan: null, from: msg.from, chatId: msg.chat.id, texts: [], firstAt: Date.now(), timer: null };
+    batch.fanPromise = getOrCreateFan({
       telegram_user_id: msg.from.id,
       telegram_username: msg.from.username,
       first_name: msg.from.first_name,
+    }).then((fan) => {
+      batch.fan = fan;
+      return fan;
     });
-    batch = { fan, from: msg.from, chatId: msg.chat.id, texts: [], firstAt: Date.now(), timer: null };
     pendingBatches.set(fanKey, batch);
   }
 
-  await logMessage(batch.fan.id, 'fan', msg.text);
+  const fan = await batch.fanPromise;
+  await logMessage(fan.id, 'fan', msg.text);
   batch.texts.push(msg.text);
 
   if (batch.timer) clearTimeout(batch.timer);
@@ -362,6 +383,29 @@ async function handleIncomingMessage(msg, opts = {}) {
         first_name: msg.from.first_name,
         source_token: sourceToken,
       });
+
+      // MISE À JOUR 30/08/2026 — bug trouvé en revoyant des conversations
+      // réelles : un fan qui recliquait son lien Telegram (deep link, souvent
+      // repartagé ou recliqué par erreur) redéclenchait TOUJOURS l'intro
+      // complète, même si la conversation existait déjà depuis longtemps —
+      // un fan engagé ou même déjà client recevait donc, sans aucune raison
+      // apparente, exactement le même message d'accueil qu'un inconnu qui
+      // découvre le bot, ce qui casse la conversation en cours et paraît
+      // buggé. On vérifie maintenant s'il a déjà un historique avant d'envoyer
+      // l'intro complète — et, comme pour un message normal, on respecte une
+      // conversation mise en pause (l'IA ne doit pas reprendre la main toute
+      // seule juste parce que le fan a retapé /start).
+      if (fan.paused) {
+        console.log(`Fan ${fan.id} en pause — /start reçu, pas de réponse automatique.`);
+        return;
+      }
+      const priorHistory = await getRecentHistory(fan.id, 1);
+      if (priorHistory.length > 0) {
+        const welcomeBack = 'hola de nuevo! en que te ayudo hoy 😊';
+        await replyToFan({ settings, chatId, fan, text: welcomeBack });
+        return;
+      }
+
       const introTemplate =
         fan.ab_variant === 'B' && settings.intro_message_b ? settings.intro_message_b : settings.intro_message;
       const intro = introTemplate
@@ -561,11 +605,29 @@ async function handleIncomingMessage(msg, opts = {}) {
     try {
       const fallbackSettings = await getSettings().catch(() => null);
       if (fallbackSettings && msg && msg.chat && msg.chat.id) {
-        await sendMessage(
-          fallbackSettings.telegram_bot_token,
-          msg.chat.id,
-          'uy se me trabo un momentico, ya te respondo 🙏'
-        );
+        const fallbackText = 'uy se me trabo un momentico, ya te respondo 🙏';
+        await sendMessage(fallbackSettings.telegram_bot_token, msg.chat.id, fallbackText);
+        // MISE À JOUR 30/08/2026 — bug trouvé en croisant les horaires d'une
+        // vraie panne de crédit Anthropic avec la conversation d'un fan
+        // ("Darikson") : ce message de repli partait bien sur Telegram, mais
+        // n'était JAMAIS journalisé dans `conversation_messages` (contrairement
+        // à tous les autres envois, qui passent par `replyToFan`/`logMessage`).
+        // Résultat : côté dashboard, rien ne distinguait "le fan attend une
+        // réponse" de "tout va bien" — la panne de plusieurs heures était
+        // invisible. On journalise maintenant ce repli comme n'importe quel
+        // autre message assistant, même si `fan` n'a pas pu être résolu plus
+        // haut (dans ce cas on ne peut rien journaliser, mais c'est rarissime :
+        // `getOrCreateFan` est justement la première chose qui échouerait).
+        try {
+          const fallbackFan = await getOrCreateFan({
+            telegram_user_id: msg.from.id,
+            telegram_username: msg.from.username,
+            first_name: msg.from.first_name,
+          });
+          await logMessage(fallbackFan.id, 'assistant', fallbackText);
+        } catch (logErr) {
+          console.error('Erreur journalisation message de repli:', logErr);
+        }
       }
     } catch (fallbackErr) {
       console.error('Erreur envoi message de repli après échec de traitement:', fallbackErr);
