@@ -868,25 +868,7 @@
 
     <!-- VENTES -->
     <div class="tab-content" id="tab-sales" style="display:none">
-      <div class="page-head"><h2>Ventes</h2><p>"Envoyé" = un lien de paiement a été généré. "Payé" = toi ou Meely avez vérifié que l'argent est bien arrivé (wallet Dropp.fans, ou preuve Yape/Nequi). Rien ne le fait automatiquement.</p></div>
-      <div class="panel">
-        <h3>Enregistrer un paiement reçu autrement (Yape, Nequi, en main propre...)</h3>
-        <p class="muted" style="margin-top:-6px">À utiliser quand un fan a payé par un moyen alternatif vérifié, sans passer par le lien Dropp.fans habituel.</p>
-        <div class="row">
-          <div><label>Fan</label><select id="manual_sale_fan"></select></div>
-          <div><label>Article (optionnel)</label><select id="manual_sale_item"><option value="">— aucun —</option></select></div>
-          <div><label>Prix reçu</label><input id="manual_sale_price" type="number" step="0.01" /></div>
-          <div><label>Moyen de paiement</label>
-            <select id="manual_sale_method">
-              <option value="yape">Yape</option>
-              <option value="nequi">Nequi</option>
-              <option value="efectivo">En main propre</option>
-              <option value="autre">Autre</option>
-            </select>
-          </div>
-          <div style="flex:0"><button class="btn btn-primary" onclick="addManualSale()">Enregistrer comme payé</button></div>
-        </div>
-      </div>
+      <div class="page-head"><h2>Ventes</h2><p>"Envoyé" = un lien de paiement a été généré. "Payé" = toi ou Meely avez vérifié que l'argent est bien arrivé (wallet Dropp.fans, ou preuve Yape/Nequi). Rien ne le fait automatiquement — utilise "Confirmer payé" sur une ligne ci-dessous une fois le paiement vérifié.</p></div>
       <div class="panel">
         <table id="salesTable"><thead><tr><th>Fan</th><th>Article</th><th>Prix</th><th>Moyen</th><th>Statut</th><th>Date</th><th></th></tr></thead><tbody></tbody></table>
       </div>
@@ -2588,13 +2570,7 @@ function closeWizardOverlay(){
 
 // ---- Ventes ----
 async function loadSales(){
-  // MISE À JOUR 30/08/2026 — plafond relevé (200 -> 2000, voir /api/admin/fans)
-  // pour pouvoir enregistrer une vente manuelle même pour un fan peu actif récemment.
-  const [sales, fans] = await Promise.all([api('/api/admin/sales'), api('/api/admin/fans?limit=2000')]);
-  const fanSelect = document.getElementById('manual_sale_fan');
-  fanSelect.innerHTML = fans.map(f => `<option value="${f.id}">${escapeHtml(f.telegram_username ? '@'+f.telegram_username : (f.first_name || f.telegram_user_id))}</option>`).join('');
-  const itemSelect = document.getElementById('manual_sale_item');
-  itemSelect.innerHTML = '<option value="">— aucun —</option>' + catalogCache.map(it => `<option value="${it.id}">${it.name} (${fmtMoney(it.price)})</option>`).join('');
+  const sales = await api('/api/admin/sales');
 
   document.querySelector('#salesTable tbody').innerHTML = (sales || []).map(s => {
     const fanLabel = s.fans?.telegram_username ? '@'+s.fans.telegram_username : (s.fans?.first_name || s.fan_id);
@@ -2617,22 +2593,6 @@ async function confirmSaleRow(id){
     loadSales();
   } catch (err) {
     showToast('Erreur — vente PAS marquée payée: ' + err.message, true);
-  }
-}
-
-async function addManualSale(){
-  const fan_id = document.getElementById('manual_sale_fan').value;
-  const catalog_item_id = document.getElementById('manual_sale_item').value || null;
-  const price = parseFloat(document.getElementById('manual_sale_price').value);
-  const payment_method = document.getElementById('manual_sale_method').value;
-  if (!fan_id || !price) { showToast('Choisis un fan et un prix.', true); return; }
-  try {
-    await api('/api/admin/sales/manual', { method:'POST', body: JSON.stringify({ fan_id, catalog_item_id, price, payment_method }) });
-    document.getElementById('manual_sale_price').value = '';
-    showToast('Vente enregistrée ✅');
-    loadSales();
-  } catch (err) {
-    showToast('Erreur — vente PAS enregistrée: ' + err.message, true);
   }
 }
 

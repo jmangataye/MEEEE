@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeli — Crea tu asistente de ventas con IA</title>
+<style>
+  :root{--bg:#0f1220;--card:#171b2e;--accent:#8b5cf6;--accent2:#ec4899;--text:#f1f2f6;--muted:#9096b0;--ok:#22c55e;--err:#ef4444;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(160deg,#0f1220,#1a1030);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .wrap{max-width:480px;width:100%;}
+  .logo{font-size:28px;font-weight:800;text-align:center;margin-bottom:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .tagline{text-align:center;color:var(--muted);margin-bottom:28px;font-size:14px;}
+  .card{background:var(--card);border-radius:16px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,.4);}
+  label{display:block;font-size:13px;color:var(--muted);margin:16px 0 6px;}
+  label:first-of-type{margin-top:0;}
+  input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #2a2f4a;background:#0f1220;color:var(--text);font-size:15px;}
+  input:focus{outline:none;border-color:var(--accent);}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4;}
+  .hint a{color:var(--accent);}
+  button{width:100%;margin-top:22px;padding:14px;border:none;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;font-size:15px;font-weight:700;cursor:pointer;}
+  button:disabled{opacity:.6;cursor:not-allowed;}
+  .msg{margin-top:16px;padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.5;display:none;}
+  .msg.err{background:rgba(239,68,68,.12);color:#fca5a5;display:block;}
+  .msg.ok{background:rgba(34,197,94,.12);color:#86efac;display:block;}
+  .result{display:none;}
+  .result .row{background:#0f1220;border:1px solid #2a2f4a;border-radius:10px;padding:12px 14px;margin-top:10px;}
+  .result .row span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+  .result .row code{font-size:14px;word-break:break-all;color:var(--text);}
+  .result a.dashboard-link{display:inline-block;margin-top:16px;text-align:center;width:100%;padding:14px;border-radius:10px;background:#1f2440;color:var(--text);text-decoration:none;font-weight:600;}
+  footer{text-align:center;margin-top:20px;color:var(--muted);font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">Meeli</div>
+  <div class="tagline">Ton assistante de vente IA, sur Telegram, en 2 minutes</div>
+
+  <div class="card" id="formCard">
+    <form id="signupForm">
+      <label for="name">Nom (ou nom de scène)</label>
+      <input id="name" name="name" type="text" required placeholder="Ex: Camila">
+
+      <label for="owner_email">Email</label>
+      <input id="owner_email" name="owner_email" type="email" required placeholder="toi@example.com">
+
+      <label for="telegram_bot_token">Token de bot Telegram</label>
+      <input id="telegram_bot_token" name="telegram_bot_token" type="text" required placeholder="123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      <div class="hint">Pas encore de bot ? Ouvre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> sur Telegram, envoie <code>/newbot</code>, suis les étapes, puis colle ici le token qu'il te donne.</div>
+
+      <label for="telegram_bot_username">Nom d'utilisateur du bot (optionnel)</label>
+      <input id="telegram_bot_username" name="telegram_bot_username" type="text" placeholder="ex: camila_bot">
+
+      <button type="submit" id="submitBtn">Créer mon compte Meeli</button>
+    </form>
+    <div class="msg" id="msgBox"></div>
+  </div>
+
+  <div class="card result" id="resultCard">
+    <div class="msg ok" style="display:block;">✅ Ton compte Meeli est prêt !</div>
+    <div class="row">
+      <span>Ton token d'accès admin (garde-le précieusement)</span>
+      <code id="resToken"></code>
+    </div>
+    <div class="hint">Ce token te donne accès à ton tableau de bord — il n'est affiché qu'une seule fois ici. Note-le maintenant.</div>
+    <a class="dashboard-link" id="resDashboardLink" href="#">Aller à mon tableau de bord →</a>
+  </div>
+
+  <footer>En créant un compte tu acceptes que Meeli t'assiste dans tes ventes via Telegram.</footer>
+</div>
+
+<script>
+(function(){
+  var form = document.getElementById('signupForm');
+  var msgBox = document.getElementById('msgBox');
+  var submitBtn = document.getElementById('submitBtn');
+  var formCard = document.getElementById('formCard');
+  var resultCard = document.getElementById('resultCard');
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    msgBox.className = 'msg';
+    msgBox.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Création en cours...';
+
+    var payload = {
+      name: document.getElementById('name').value.trim(),
+      owner_email: document.getElementById('owner_email').value.trim(),
+      telegram_bot_token: document.getElementById('telegram_bot_token').value.trim(),
+      telegram_bot_username: document.getElementById('telegram_bot_username').value.trim() || undefined,
+    };
+
+    fetch('/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+      .then(function(result){
+        if (!result.ok) {
+          throw new Error(result.data && result.data.error ? result.data.error : 'Erreur inconnue');
+        }
+        document.getElementById('resToken').textContent = result.data.admin_token || '(indisponible)';
+        var dashLink = document.getElementById('resDashboardLink');
+        dashLink.href = (result.data.dashboard_url || '/admin/') + '?token=' + encodeURIComponent(result.data.admin_token || '');
+        formCard.style.display = 'none';
+        resultCard.style.display = 'block';
+      })
+      .catch(function(err){
+        msgBox.className = 'msg err';
+        msgBox.textContent = '❌ ' + err.message;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Créer mon compte Meeli';
+      });
+  });
+})();
+</script>
+</body>
+</html>

@@ -13,7 +13,6 @@ const {
   logMessage,
   getRecentHistory,
   recordSale,
-  recordManualSale,
   listSales,
   confirmSale,
   getPurchasedItemIds,
@@ -59,6 +58,11 @@ const {
   logVariantEvent,
   createScriptVariant,
   updateScriptVariant,
+  getTenantById,
+  getTenantByBotToken,
+  listActiveTenants,
+  createTenant,
+  updateTenant,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt, generateScriptSuggestion } = require('./lib/claudeAgent');
@@ -72,6 +76,18 @@ const {
   PAYMENT_ALT_FALLBACK_MESSAGE,
   isPaymentAlternativeOnly,
 } = require('./lib/safetyFilter');
+const stripeBilling = require('./lib/stripe');
+
+// ---------- Multi-tenant : identifiant du tenant historique "Meely" ----------
+// Ce projet a démarré avec UNE seule créatrice avant de devenir un SaaS
+// multi-créatrices (30/08/2026) — voir migration `create_tenants_table_and_seed_default`.
+// Le webhook Telegram déjà configuré chez Telegram pour Meely pointe vers
+// l'URL historique `/telegram/webhook` (sans tenant_id dans le chemin) : plutôt
+// que de devoir reconfigurer ce webhook en prod (risque inutile pour un bot
+// déjà en activité), on fait pointer cette route historique vers ce tenant
+// précis en dur, et on ajoute une route `/telegram/webhook/:tenantId` pour
+// toute nouvelle créatrice inscrite en self-service (voir POST /api/signup).
+const MEELY_TENANT_ID = '8d7e2c7d-ad86-459a-b8c3-ac957e55935c';
 
 // ---------- Filet de sécurité global : une seule promesse rejetée sans
 // .catch() n'importe où dans le code (même dans une dépendance) fait, PAR
@@ -91,15 +107,30 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
+// IMPORTANT : le webhook Stripe a besoin du corps BRUT (Buffer) de la requête
+// pour vérifier sa signature (voir lib/stripe.js) — il doit donc être monté
+// AVANT express.json() global, sur son chemin exact uniquement. Express
+// marque req._body une fois le corps lu ; express.json() plus bas voit ce
+// marqueur sur CE chemin précis et ne retente pas de le re-parser en JSON.
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use('/landing', express.static(path.join(__dirname, 'public/landing')));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+app.use('/signup', express.static(path.join(__dirname, 'public/signup')));
 
 // ---------- Sécurité admin (multi-token, vérifié en base) ----------
+// MISE À JOUR 30/08/2026 (multi-tenant) — isValidAdminToken() renvoie
+// maintenant { ok, tenant_id } au lieu d'un simple booléen : chaque token
+// admin appartient à UN tenant précis (une créatrice), et req.tenantId est
+// posé ici une fois pour toutes pour que chaque route admin sache
+// automatiquement de quel compte elle doit lire/écrire les données — sans ça,
+// toutes les fonctions de lib/supabase.js qui exigent désormais un tenant_id
+// explicite (garde-fou anti-mélange de données entre créatrices) échoueraient.
 async function requireAdminToken(req, res, next) {
   const token = req.headers['x-admin-token'] || req.query.token;
-  const ok = await isValidAdminToken(token).catch(() => false);
-  if (!ok) return res.status(401).json({ error: 'unauthorized' });
+  const result = await isValidAdminToken(token).catch(() => ({ ok: false, tenant_id: null }));
+  if (!result || !result.ok) return res.status(401).json({ error: 'unauthorized' });
+  req.tenantId = result.tenant_id;
   next();
 }
 
@@ -146,7 +177,10 @@ async function replyToFan({ settings, chatId, fan, text }) {
       minSeconds: settings.response_delay_min_seconds,
       maxSeconds: settings.response_delay_max_seconds,
     });
-    await logMessage(fan.id, 'assistant', bubble);
+    // `fan.tenant_id` : le fan (venant de getOrCreateFan/getFanById) porte
+    // déjà sa propre colonne tenant_id — plus simple et plus sûr que de faire
+    // remonter tenantId depuis chaque appelant de replyToFan().
+    await logMessage(fan.id, 'assistant', bubble, false, fan.tenant_id);
   }
 }
 
@@ -221,17 +255,18 @@ function detectMediaType(msg) {
   return null;
 }
 
-async function handleNonTextMessage(msg, mediaType) {
+async function handleNonTextMessage(msg, mediaType, tenantId) {
   try {
     const chatId = msg.chat.id;
-    const settings = await getSettings();
+    const settings = await getSettings(tenantId);
     const fan = await getOrCreateFan({
       telegram_user_id: msg.from.id,
       telegram_username: msg.from.username,
       first_name: msg.from.first_name,
+      tenant_id: tenantId,
     });
     const meta = MEDIA_TYPE_REPLIES[mediaType] || MEDIA_TYPE_REPLIES.document;
-    await logMessage(fan.id, 'fan', meta.log);
+    await logMessage(fan.id, 'fan', meta.log, false, tenantId);
 
     // MISE À JOUR 30/08/2026 — pause globale (dashboard, Vue d'ensemble), à ne
     // pas confondre avec la pause par fan juste en dessous : ici RIEN ne
@@ -277,7 +312,7 @@ const pendingBatches = new Map(); // fanKey -> { fanPromise, fan, from, chatId, 
 const BATCH_DEBOUNCE_MS = 6000;
 const BATCH_MAX_WAIT_MS = 15000;
 
-async function enqueueFanMessage(fanKey, msg) {
+async function enqueueFanMessage(fanKey, msg, tenantId) {
   // MISE À JOUR 30/08/2026 — bug trouvé en analysant le "flood" de messages
   // (10-15+ bulles envoyées en rafale pour ce qui semblait être UN seul tour
   // de fan) : la version précédente faisait `pendingBatches.get(fanKey)` puis,
@@ -297,11 +332,12 @@ async function enqueueFanMessage(fanKey, msg) {
   // la même résolution au lieu d'en déclencher une deuxième.
   let batch = pendingBatches.get(fanKey);
   if (!batch) {
-    batch = { fanPromise: null, fan: null, from: msg.from, chatId: msg.chat.id, texts: [], firstAt: Date.now(), timer: null };
+    batch = { fanPromise: null, fan: null, from: msg.from, chatId: msg.chat.id, texts: [], firstAt: Date.now(), timer: null, tenantId };
     batch.fanPromise = getOrCreateFan({
       telegram_user_id: msg.from.id,
       telegram_username: msg.from.username,
       first_name: msg.from.first_name,
+      tenant_id: tenantId,
     }).then((fan) => {
       batch.fan = fan;
       return fan;
@@ -310,7 +346,7 @@ async function enqueueFanMessage(fanKey, msg) {
   }
 
   const fan = await batch.fanPromise;
-  await logMessage(fan.id, 'fan', msg.text);
+  await logMessage(fan.id, 'fan', msg.text, false, tenantId);
   batch.texts.push(msg.text);
 
   if (batch.timer) clearTimeout(batch.timer);
@@ -338,41 +374,62 @@ async function enqueueFanMessage(fanKey, msg) {
       const history = raw.filter((m) => new Date(m.created_at).getTime() < batch.firstAt).slice(-20);
       return handleIncomingMessage(
         { chat: { id: batch.chatId }, from: batch.from, text: batch.texts.join('\n') },
-        { skipLogging: true, historyOverride: history }
+        { skipLogging: true, historyOverride: history, tenantId: batch.tenantId }
       );
     }).catch((err) => console.error('Erreur traitement lot de messages fan:', err));
   }, wait);
 }
 
-// ---------- Webhook Telegram ----------
-app.post('/telegram/webhook', async (req, res) => {
+// ---------- Webhook Telegram (multi-tenant) ----------
+// MISE À JOUR 30/08/2026 — une seule fonction de traitement partagée, montée
+// sur DEUX routes : l'URL historique `/telegram/webhook` (déjà configurée
+// côté Telegram pour Meely, jamais retouchée pour éviter tout risque sur le
+// bot déjà en prod) résolue en dur vers MEELY_TENANT_ID, et une nouvelle URL
+// `/telegram/webhook/:tenantId` utilisée pour toute créatrice inscrite via
+// POST /api/signup (voir setWebhook à cet endroit).
+async function processTelegramUpdate(req, res, tenantId) {
   res.sendStatus(200); // répondre vite, traiter ensuite
   try {
+    if (!tenantId) {
+      console.error('Webhook Telegram reçu sans tenant_id résolu — ignoré.');
+      return;
+    }
     const update = req.body;
-    if (alreadyProcessed(update.update_id)) {
-      console.warn('Update Telegram déjà traité, ignoré:', update.update_id);
+    // Le compteur update_id de Telegram est propre à CHAQUE bot — deux
+    // créatrices différentes peuvent tout à fait avoir un update_id=42 en même
+    // temps sur leurs bots respectifs. Sans le préfixe tenant_id ici, le
+    // message de l'une pourrait être ignoré à tort comme "déjà traité" à cause
+    // du message de l'autre (faux positif inter-tenant).
+    const dedupeKey = `${tenantId}:${update.update_id}`;
+    if (alreadyProcessed(dedupeKey)) {
+      console.warn('Update Telegram déjà traité, ignoré:', dedupeKey);
       return;
     }
     const msg = update.message;
     if (!msg || !msg.from) return;
-    const fanKey = (msg.from && msg.from.id) || msg.chat.id;
+    // Même logique pour fanKey : un même utilisateur Telegram réel peut être
+    // fan de PLUSIEURS créatrices (bots différents) — sans le préfixe
+    // tenant_id, leurs conversations indépendantes seraient à tort
+    // sérialisées/regroupées ensemble comme si c'était un seul et même fil.
+    const fanKey = `${tenantId}:${(msg.from && msg.from.id) || msg.chat.id}`;
 
     if (msg.text) {
       if (msg.text.startsWith('/start')) {
-        await runSerializedForFan(fanKey, () => handleIncomingMessage(msg));
+        await runSerializedForFan(fanKey, () => handleIncomingMessage(msg, { tenantId }));
         return;
       }
       // ---------- Capture automatique du chat_id admin ----------
-      // Voir lib/supabase.js (tryCaptureAdminChatId) : Bryan génère un code
-      // depuis le dashboard puis s'envoie lui-même "/admin_CODE" sur Telegram
-      // — jamais journalisé comme message de fan, ne crée pas de fan, ne
-      // passe jamais par le lot/l'IA.
+      // Voir lib/supabase.js (tryCaptureAdminChatId) : Bryan (ou toute autre
+      // créatrice) génère un code depuis SON dashboard puis s'envoie lui-même
+      // "/admin_CODE" sur Telegram — jamais journalisé comme message de fan,
+      // ne crée pas de fan, ne passe jamais par le lot/l'IA.
       if (msg.text.startsWith('/admin_')) {
         const code = msg.text.slice('/admin_'.length).trim();
         try {
-          const captured = await tryCaptureAdminChatId(code, msg.chat.id);
+          const captured = await tryCaptureAdminChatId(code, msg.chat.id, tenantId);
+          const settings = await getSettings(tenantId);
           await sendMessage(
-            (await getSettings()).telegram_bot_token,
+            settings.telegram_bot_token,
             msg.chat.id,
             captured
               ? '✅ Alertes Telegram activées — tu recevras ici les ventes VIP et les incidents de sécurité.'
@@ -383,24 +440,27 @@ app.post('/telegram/webhook', async (req, res) => {
         }
         return;
       }
-      await enqueueFanMessage(fanKey, msg);
+      await enqueueFanMessage(fanKey, msg, tenantId);
       return;
     }
 
     const mediaType = detectMediaType(msg);
     if (mediaType) {
-      await runSerializedForFan(fanKey, () => handleNonTextMessage(msg, mediaType));
+      await runSerializedForFan(fanKey, () => handleNonTextMessage(msg, mediaType, tenantId));
     }
   } catch (err) {
     console.error('Erreur traitement message Telegram:', err);
   }
-});
+}
+
+app.post('/telegram/webhook', (req, res) => processTelegramUpdate(req, res, MEELY_TENANT_ID));
+app.post('/telegram/webhook/:tenantId', (req, res) => processTelegramUpdate(req, res, req.params.tenantId));
 
 async function handleIncomingMessage(msg, opts = {}) {
-  const { skipLogging = false, historyOverride = null } = opts;
+  const { skipLogging = false, historyOverride = null, tenantId } = opts;
   try {
     const chatId = msg.chat.id;
-    const settings = await getSettings();
+    const settings = await getSettings(tenantId);
 
     // MISE À JOUR 30/08/2026 — pause globale (dashboard, Vue d'ensemble).
     // Différent de la pause par fan plus bas : ici on journalise quand même le
@@ -415,8 +475,9 @@ async function handleIncomingMessage(msg, opts = {}) {
             telegram_user_id: msg.from.id,
             telegram_username: msg.from.username,
             first_name: msg.from.first_name,
+            tenant_id: tenantId,
           });
-          await logMessage(fan.id, 'fan', msg.text);
+          await logMessage(fan.id, 'fan', msg.text, false, tenantId);
         } catch (logErr) {
           console.error('Erreur journalisation pendant pause globale:', logErr.message);
         }
@@ -433,6 +494,7 @@ async function handleIncomingMessage(msg, opts = {}) {
         telegram_username: msg.from.username,
         first_name: msg.from.first_name,
         source_token: sourceToken,
+        tenant_id: tenantId,
       });
 
       // MISE À JOUR 30/08/2026 — bug trouvé en revoyant des conversations
@@ -490,7 +552,7 @@ async function handleIncomingMessage(msg, opts = {}) {
       // Expose l'événement seulement maintenant (au vrai envoi), pas à la
       // création du fan — c'est le moment où l'exposition est réelle.
       if (assignedVariantId) {
-        logVariantEvent(assignedVariantId, fan.id, 'exposed').catch((err) =>
+        logVariantEvent(assignedVariantId, fan.id, 'exposed', tenantId).catch((err) =>
           console.error('Erreur log exposition variante (non bloquant):', err.message)
         );
       }
@@ -501,12 +563,13 @@ async function handleIncomingMessage(msg, opts = {}) {
       telegram_user_id: msg.from.id,
       telegram_username: msg.from.username,
       first_name: msg.from.first_name,
+      tenant_id: tenantId,
     });
 
     // `skipLogging` : ce message a déjà été journalisé au moment de sa
     // réception par enqueueFanMessage (voir plus haut) — ne pas le dupliquer.
     if (!skipLogging) {
-      await logMessage(fan.id, 'fan', msg.text);
+      await logMessage(fan.id, 'fan', msg.text, false, tenantId);
     }
 
     // ---------- Pause par conversation ----------
@@ -520,13 +583,13 @@ async function handleIncomingMessage(msg, opts = {}) {
       return;
     }
 
-    const catalog = await getActiveCatalog();
+    const catalog = await getActiveCatalog(tenantId);
     // `historyOverride` : lot de messages regroupés (voir enqueueFanMessage) —
     // l'historique a déjà été capturé avant ce lot pour éviter de le
     // dupliquer avec le contenu de "fanMessage" ci-dessous.
     const history = historyOverride || (await getRecentHistory(fan.id, 20));
     const purchasedItemIds = await getPurchasedItemIds(fan.id);
-    const vaultSummary = await getVaultSummary();
+    const vaultSummary = await getVaultSummary(tenantId);
 
     const { text, toolCalls } = await runAgentTurn({
       settings,
@@ -549,7 +612,7 @@ async function handleIncomingMessage(msg, opts = {}) {
     const textReview = reviewOutgoingText({ text, catalog, settings, fanText: msg.text });
     if (!textReview.ok) {
       console.error(`⚠️ Filtre de sécurité (texte) déclenché pour fan ${fan.id}:`, textReview.reasons, '| texte bloqué:', text);
-      await logSafetyIncident({ fan_id: fan.id, reasons: textReview.reasons, flagged_text: text });
+      await logSafetyIncident({ fan_id: fan.id, reasons: textReview.reasons, flagged_text: text, tenant_id: tenantId });
       await setFanPaused(fan.id, true);
 
       // Cas particulier : le fan demande juste un moyen de paiement alternatif
@@ -602,6 +665,7 @@ async function handleIncomingMessage(msg, opts = {}) {
             fan_id: fan.id,
             reasons: offerReview.reasons,
             flagged_text: `send_offer ${JSON.stringify(call.input)}`,
+            tenant_id: tenantId,
           });
           await setFanPaused(fan.id, true);
           await replyToFan({ settings, chatId, fan, text: FALLBACK_MESSAGE });
@@ -639,6 +703,7 @@ async function handleIncomingMessage(msg, opts = {}) {
             catalog_item_id: item.id,
             price: call.input.agreed_price,
             dropfans_link: link,
+            tenant_id: tenantId,
           });
 
           if (Number(call.input.agreed_price) >= Number(settings.alert_min_sale)) {
@@ -677,7 +742,7 @@ async function handleIncomingMessage(msg, opts = {}) {
           // visible dans l'historique du dashboard (et dans le contexte donné
           // à l'IA au tour suivant) — le contenu réel de la photo n'a pas
           // besoin d'être stocké, juste la trace qu'elle a été envoyée.
-          await logMessage(fan.id, 'assistant', `[📸 foto de aperçu enviada: ${item.name}]`);
+          await logMessage(fan.id, 'assistant', `[📸 foto de aperçu enviada: ${item.name}]`, false, tenantId);
         } catch (err) {
           console.error('Erreur envoi photo d\'aperçu:', err);
         }
@@ -706,7 +771,7 @@ async function handleIncomingMessage(msg, opts = {}) {
         // volontaire : ne doit jamais ralentir la réponse au fan, et est un
         // no-op silencieux tant qu'OPENAI_API_KEY n'est pas configurée.
         if (call.input.notes) {
-          rememberFanNoteEmbedding(fan.id, call.input.notes).catch((err) =>
+          rememberFanNoteEmbedding(fan.id, call.input.notes, fan.tenant_id).catch((err) =>
             console.error('Erreur embedding mémoire fan (non bloquant):', err.message)
           );
         }
@@ -723,7 +788,7 @@ async function handleIncomingMessage(msg, opts = {}) {
     // getStalledConversations) reste le filet de sécurité si même ce message
     // de repli ne part pas.
     try {
-      const fallbackSettings = await getSettings().catch(() => null);
+      const fallbackSettings = await getSettings(tenantId).catch(() => null);
       if (fallbackSettings && msg && msg.chat && msg.chat.id) {
         const fallbackText = 'uy se me trabo un momentico, ya te respondo 🙏';
         await sendMessage(fallbackSettings.telegram_bot_token, msg.chat.id, fallbackText);
@@ -752,8 +817,9 @@ async function handleIncomingMessage(msg, opts = {}) {
             telegram_user_id: msg.from.id,
             telegram_username: msg.from.username,
             first_name: msg.from.first_name,
+            tenant_id: tenantId,
           });
-          await logMessage(fallbackFan.id, 'assistant', fallbackText, true);
+          await logMessage(fallbackFan.id, 'assistant', fallbackText, true, tenantId);
         } catch (logErr) {
           console.error('Erreur journalisation message de repli:', logErr);
         }
@@ -765,12 +831,18 @@ async function handleIncomingMessage(msg, opts = {}) {
 }
 
 // ---------- Génération de lien traçable (depuis la landing page) ----------
+// `tenant_id` optionnel dans le corps : retombe sur Meely (comportement
+// historique) si absent, pour ne rien casser sur la landing page existante —
+// une future landing page par créatrice pourra passer son propre tenant_id.
 app.post('/api/tracking-link', async (req, res) => {
   try {
-    const { campaign_label } = req.body;
-    const settings = await getSettings();
+    const { campaign_label, tenant_id } = req.body;
+    const resolvedTenantId = tenant_id || MEELY_TENANT_ID;
+    const settings = await getSettings(resolvedTenantId);
     const token = crypto.randomBytes(6).toString('hex');
-    const { error } = await supabase.from('tracking_links').insert({ source_token: token, campaign_label });
+    const { error } = await supabase
+      .from('tracking_links')
+      .insert({ source_token: token, campaign_label, tenant_id: resolvedTenantId });
     if (error) throw error;
     const link = `https://t.me/${settings.telegram_bot_username}?start=${token}`;
     res.json({ link, token });
@@ -780,10 +852,125 @@ app.post('/api/tracking-link', async (req, res) => {
   }
 });
 
+// ---------- Inscription self-service (SaaS ouvert à tous) ----------
+// MISE À JOUR 30/08/2026 — Meeli devient une plateforme ouverte : n'importe
+// quelle créatrice/entreprise peut créer son compte ici (voir public/signup),
+// pas seulement les créatrices déjà recrutées par Bryan. Route volontairement
+// PUBLIQUE (pas de requireAdminToken) puisque personne n'a encore de token à
+// ce stade — createTenant() (lib/supabase.js) crée le tenant + ses réglages
+// par défaut + un premier token admin ; on tente ensuite de configurer le
+// webhook Telegram de ce nouveau bot, en best-effort (une erreur ici ne doit
+// pas empêcher la créatrice de récupérer son compte — elle pourra relancer
+// "Configurer le webhook" depuis son dashboard, voir /api/admin/setup-webhook).
+app.post('/api/signup', async (req, res) => {
+  try {
+    const { name, owner_email, telegram_bot_token, telegram_bot_username } = req.body || {};
+    if (!name || !name.trim() || !telegram_bot_token || !telegram_bot_token.trim()) {
+      return res.status(400).json({ error: 'name et telegram_bot_token sont obligatoires.' });
+    }
+    const { tenant, adminToken } = await createTenant({
+      name: name.trim(),
+      owner_email: owner_email ? owner_email.trim() : null,
+      telegram_bot_token: telegram_bot_token.trim(),
+      telegram_bot_username: telegram_bot_username ? telegram_bot_username.trim() : null,
+    });
+
+    const base = process.env.PUBLIC_BASE_URL;
+    let webhookResult = null;
+    if (base) {
+      try {
+        webhookResult = await setWebhook(tenant.telegram_bot_token, `${base}/telegram/webhook/${tenant.id}`);
+      } catch (whErr) {
+        console.error(`Erreur configuration webhook Telegram pour nouveau tenant ${tenant.id}:`, whErr.message);
+      }
+    }
+
+    res.json({
+      ok: true,
+      tenant_id: tenant.id,
+      admin_token: adminToken.token,
+      dashboard_url: '/admin/',
+      webhook_configured: !!(webhookResult && webhookResult.ok !== false),
+    });
+  } catch (err) {
+    console.error('Erreur inscription tenant:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------- Facturation Stripe (squelette — voir lib/stripe.js) ----------
+// IMPORTANT : aucun produit/prix Stripe n'est créé automatiquement ici — c'est
+// une décision business qui revient à Bryan. Tant que STRIPE_SECRET_KEY /
+// STRIPE_PRICE_ID ne sont pas configurées sur Render, cette route renvoie une
+// erreur claire plutôt que de planter, et l'inscription self-service
+// ci-dessus continue de fonctionner normalement en statut "trial" sans elle.
+app.post('/api/admin/billing/checkout', requireAdminToken, async (req, res) => {
+  try {
+    if (!stripeBilling.available) {
+      return res.status(400).json({ error: 'Facturation Stripe non configurée côté serveur pour le moment.' });
+    }
+    const tenant = await getTenantById(req.tenantId);
+    if (!tenant) return res.status(404).json({ error: 'tenant introuvable' });
+    const base = process.env.PUBLIC_BASE_URL || '';
+    const session = await stripeBilling.createCheckoutSession({
+      tenantId: tenant.id,
+      customerEmail: tenant.owner_email || undefined,
+      successUrl: `${base}/admin/?billing=success`,
+      cancelUrl: `${base}/admin/?billing=cancel`,
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Erreur création session Stripe Checkout:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Webhook Stripe — corps BRUT (voir express.raw() monté plus haut, avant
+// express.json()). Deux événements suffisent pour gérer le cycle de vie
+// basique d'un abonnement : activation à la 1ère facture payée, suspension si
+// l'abonnement est annulé/résilié. `metadata.tenant_id` a été posé lors de la
+// création de la session Checkout ci-dessus.
+app.post('/api/webhooks/stripe', async (req, res) => {
+  try {
+    const signature = req.headers['stripe-signature'];
+    stripeBilling.verifyWebhookSignature(req.body, signature);
+    const event = JSON.parse(req.body.toString('utf8'));
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const tenantId = session.metadata && session.metadata.tenant_id;
+      if (tenantId) {
+        await updateTenant(tenantId, {
+          status: 'active',
+          stripe_customer_id: session.customer || null,
+          stripe_subscription_id: session.subscription || null,
+        });
+      }
+    } else if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      const tenantId = subscription.metadata && subscription.metadata.tenant_id;
+      if (tenantId) {
+        await updateTenant(tenantId, { status: 'canceled' });
+      }
+    } else if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object;
+      const tenantId = invoice.subscription_details?.metadata?.tenant_id;
+      if (tenantId) {
+        await updateTenant(tenantId, { status: 'suspended' });
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Erreur webhook Stripe:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: settings ----------
 app.get('/api/admin/settings', requireAdminToken, async (req, res) => {
   try {
-    res.json(await getSettings());
+    res.json(await getSettings(req.tenantId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -797,7 +984,7 @@ app.get('/api/admin/settings', requireAdminToken, async (req, res) => {
 // rapporté ("ça n'enregistre pas"). Repéré le 29/08 via les logs serveur.
 app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
   try {
-    res.json(await updateSettings(req.body));
+    res.json(await updateSettings(req.body, req.tenantId));
   } catch (err) {
     console.error('Erreur mise à jour réglages:', err.message);
     res.status(500).json({ error: err.message });
@@ -813,7 +1000,7 @@ app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
 app.post('/api/admin/bot-pause', requireAdminToken, async (req, res) => {
   try {
     const paused = req.body.paused === true;
-    const updated = await updateSettings({ bot_globally_paused: paused });
+    const updated = await updateSettings({ bot_globally_paused: paused }, req.tenantId);
     res.json({ bot_globally_paused: updated.bot_globally_paused });
   } catch (err) {
     console.error('Erreur pause globale du bot:', err.message);
@@ -828,8 +1015,8 @@ app.post('/api/admin/bot-pause', requireAdminToken, async (req, res) => {
 // le front pré-remplit les champs et Bryan doit cliquer "Enregistrer" lui-même.
 app.post('/api/admin/generate-script-suggestion', requireAdminToken, async (req, res) => {
   try {
-    const settings = await getSettings();
-    const catalog = await getActiveCatalog();
+    const settings = await getSettings(req.tenantId);
+    const catalog = await getActiveCatalog(req.tenantId);
     const suggestion = await generateScriptSuggestion({ settings, catalog });
     res.json(suggestion);
   } catch (err) {
@@ -847,7 +1034,7 @@ app.post('/api/admin/generate-script-suggestion', requireAdminToken, async (req,
 app.get('/api/admin/script-variants', requireAdminToken, async (req, res) => {
   try {
     const field_key = typeof req.query.field_key === 'string' && req.query.field_key ? req.query.field_key : 'intro_message';
-    const variants = await getVariantStats(field_key);
+    const variants = await getVariantStats(field_key, req.tenantId);
     res.json(variants);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -860,7 +1047,7 @@ app.post('/api/admin/script-variants', requireAdminToken, async (req, res) => {
     if (!field_key || !content || !content.trim()) {
       return res.status(400).json({ error: 'field_key et content sont obligatoires.' });
     }
-    const variant = await createScriptVariant({ field_key, label, content: content.trim() });
+    const variant = await createScriptVariant({ field_key, label, content: content.trim(), tenant_id: req.tenantId });
     res.json(variant);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -884,7 +1071,7 @@ app.patch('/api/admin/script-variants/:id', requireAdminToken, async (req, res) 
 app.get('/api/admin/settings/history', requireAdminToken, async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    res.json(await listSettingsHistory(limit));
+    res.json(await listSettingsHistory(req.tenantId, limit));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -892,7 +1079,7 @@ app.get('/api/admin/settings/history', requireAdminToken, async (req, res) => {
 
 app.post('/api/admin/settings/history/:id/restore', requireAdminToken, async (req, res) => {
   try {
-    res.json(await restoreSettingsVersion(req.params.id));
+    res.json(await restoreSettingsVersion(req.params.id, req.tenantId));
   } catch (err) {
     console.error('Erreur restauration réglages:', err.message);
     res.status(500).json({ error: err.message });
@@ -906,8 +1093,8 @@ app.post('/api/admin/settings/history/:id/restore', requireAdminToken, async (re
 // partait jamais avant le 30/08/2026).
 app.post('/api/admin/generate-setup-code', requireAdminToken, async (req, res) => {
   try {
-    const code = await generateAdminSetupCode();
-    const settings = await getSettings();
+    const code = await generateAdminSetupCode(req.tenantId);
+    const settings = await getSettings(req.tenantId);
     res.json({ code, botUsername: settings.telegram_bot_username || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -916,7 +1103,7 @@ app.post('/api/admin/generate-setup-code', requireAdminToken, async (req, res) =
 
 app.post('/api/admin/test-alert', requireAdminToken, async (req, res) => {
   try {
-    const settings = await getSettings();
+    const settings = await getSettings(req.tenantId);
     if (!settings.admin_telegram_chat_id) {
       return res.status(400).json({ error: 'Aucun chat_id enregistré — connecte les alertes ci-dessus d\'abord.' });
     }
@@ -929,7 +1116,11 @@ app.post('/api/admin/test-alert', requireAdminToken, async (req, res) => {
 
 // ---------- API Admin: catalogue ----------
 app.get('/api/admin/catalog', requireAdminToken, async (req, res) => {
-  const { data, error } = await supabase.from('catalog_items').select('*').order('sort_order');
+  const { data, error } = await supabase
+    .from('catalog_items')
+    .select('*')
+    .eq('tenant_id', req.tenantId)
+    .order('sort_order');
   if (error) return res.status(500).json({ error: error.message });
   // Ajoute une URL signée temporaire pour la photo d'aperçu visible-fan de
   // chaque article (si elle existe) — pour que le dashboard (Assistant
@@ -944,16 +1135,23 @@ app.get('/api/admin/catalog', requireAdminToken, async (req, res) => {
 });
 
 app.post('/api/admin/catalog', requireAdminToken, async (req, res) => {
-  const { data, error } = await supabase.from('catalog_items').insert(req.body).select().single();
+  // On retire un éventuel tenant_id envoyé par erreur depuis le front avant
+  // de forcer le vrai (celui du token admin authentifié) — même garde-fou
+  // que côté lib/supabase.js pour les autres inserts.
+  const payload = { ...req.body, tenant_id: req.tenantId };
+  const { data, error } = await supabase.from('catalog_items').insert(payload).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
 app.put('/api/admin/catalog/:id', requireAdminToken, async (req, res) => {
+  const payload = { ...req.body };
+  delete payload.tenant_id;
   const { data, error } = await supabase
     .from('catalog_items')
-    .update(req.body)
+    .update(payload)
     .eq('id', req.params.id)
+    .eq('tenant_id', req.tenantId)
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -961,7 +1159,11 @@ app.put('/api/admin/catalog/:id', requireAdminToken, async (req, res) => {
 });
 
 app.delete('/api/admin/catalog/:id', requireAdminToken, async (req, res) => {
-  const { error } = await supabase.from('catalog_items').delete().eq('id', req.params.id);
+  const { error } = await supabase
+    .from('catalog_items')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('tenant_id', req.tenantId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
@@ -1007,7 +1209,7 @@ app.get('/api/admin/fans', requireAdminToken, async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 50, 2000);
     const search = typeof req.query.search === 'string' ? req.query.search : '';
     const status = typeof req.query.status === 'string' ? req.query.status : '';
-    const fans = await listFansWithPreview({ limit, search, status });
+    const fans = await listFansWithPreview({ tenant_id: req.tenantId, limit, search, status });
     res.json(fans);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1044,10 +1246,10 @@ app.post('/api/admin/fans/:id/message', requireAdminToken, async (req, res) => {
   try {
     const text = (req.body.text || '').trim();
     if (!text) return res.status(400).json({ error: 'texte manquant' });
-    const [fan, settings] = await Promise.all([getFanById(req.params.id), getSettings()]);
+    const [fan, settings] = await Promise.all([getFanById(req.params.id), getSettings(req.tenantId)]);
     if (!fan) return res.status(404).json({ error: 'fan introuvable' });
     await sendMessage(settings.telegram_bot_token, fan.telegram_user_id, text);
-    await logMessage(fan.id, 'assistant', text);
+    await logMessage(fan.id, 'assistant', text, false, fan.tenant_id);
     // Optionnel : reprendre l'IA dans la foulée (case à cocher côté dashboard)
     // — pratique quand l'admin vient de débloquer une situation à la main et
     // veut que l'IA reprenne automatiquement sur le prochain message du fan.
@@ -1073,7 +1275,7 @@ app.put('/api/admin/fans/:id/note', requireAdminToken, async (req, res) => {
 // par le filtre serveur — voir lib/safetyFilter.js) ----------
 app.get('/api/admin/safety-incidents', requireAdminToken, async (req, res) => {
   try {
-    res.json(await listSafetyIncidents(50));
+    res.json(await listSafetyIncidents(req.tenantId, 50));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1099,7 +1301,7 @@ app.put('/api/admin/safety-incidents/:id/resolve', requireAdminToken, async (req
 app.get('/api/admin/stalled-conversations', requireAdminToken, async (req, res) => {
   try {
     const minutes = Math.max(1, Number(req.query.minutes) || 5);
-    res.json(await getStalledConversations(minutes));
+    res.json(await getStalledConversations(req.tenantId, minutes));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1109,7 +1311,7 @@ app.get('/api/admin/stalled-conversations', requireAdminToken, async (req, res) 
 // n'a pas écrit de nouveau message depuis (voir dismissStalledFan).
 app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, async (req, res) => {
   try {
-    await dismissStalledFan(req.params.fanId);
+    await dismissStalledFan(req.params.fanId, req.tenantId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1122,7 +1324,7 @@ app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, as
 // l'IA a enregistré via remember_about_fan quand le fan l'a mentionné.
 app.get('/api/admin/analytics/geo', requireAdminToken, async (req, res) => {
   try {
-    res.json(await getFanCountByCountry());
+    res.json(await getFanCountByCountry(req.tenantId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1141,13 +1343,13 @@ app.get('/api/admin/analytics/geo', requireAdminToken, async (req, res) => {
 app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
   try {
     const { message, history, settingsOverride } = req.body; // history: [{role:'fan'|'assistant', content}]
-    const realSettings = await getSettings();
+    const realSettings = await getSettings(req.tenantId);
     const settings =
       settingsOverride && typeof settingsOverride === 'object'
         ? { ...realSettings, ...settingsOverride }
         : realSettings;
-    const catalog = await getActiveCatalog();
-    const vaultSummary = await getVaultSummary();
+    const catalog = await getActiveCatalog(req.tenantId);
+    const vaultSummary = await getVaultSummary(req.tenantId);
     const fakeFan = { id: 'test', last_active_at: new Date().toISOString(), memory_notes: '' };
     const { text, toolCalls } = await runAgentTurn({
       settings,
@@ -1187,29 +1389,29 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
 
 // ---------- API Admin: gestion des accès admin ----------
 app.get('/api/admin/admins', requireAdminToken, async (req, res) => {
-  const tokens = await listAdminTokens();
+  const tokens = await listAdminTokens(req.tenantId);
   res.json(tokens);
 });
 
 app.post('/api/admin/admins', requireAdminToken, async (req, res) => {
-  const created = await createAdminToken(req.body.label || 'Sans nom');
+  const created = await createAdminToken(req.body.label || 'Sans nom', req.tenantId);
   res.json(created);
 });
 
 app.delete('/api/admin/admins/:id', requireAdminToken, async (req, res) => {
-  await deleteAdminToken(req.params.id);
+  await deleteAdminToken(req.params.id, req.tenantId);
   res.json({ ok: true });
 });
 
 // ---------- API Admin: analytics ----------
 app.get('/api/admin/analytics', requireAdminToken, async (req, res) => {
-  res.json(await getAnalytics());
+  res.json(await getAnalytics(req.tenantId));
 });
 
 app.get('/api/admin/analytics/timeseries', requireAdminToken, async (req, res) => {
   try {
     const days = Math.min(Number(req.query.days) || 30, 90);
-    res.json(await getDailyTimeseries(days));
+    res.json(await getDailyTimeseries(req.tenantId, days));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1222,7 +1424,7 @@ app.get('/api/admin/analytics/timeseries', requireAdminToken, async (req, res) =
 app.get('/api/admin/sales', requireAdminToken, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 100, 300);
-    res.json(await listSales(limit));
+    res.json(await listSales(req.tenantId, limit));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1240,17 +1442,6 @@ app.put('/api/admin/sales/:id/confirm', requireAdminToken, async (req, res) => {
 // Enregistre une vente qui n'est jamais passée par "send_offer" (ex: paiement
 // Yape/Nequi vérifié à la main par l'admin) — crée directement une ligne déjà
 // marquée "payée" et met à jour le total dépensé du fan.
-app.post('/api/admin/sales/manual', requireAdminToken, async (req, res) => {
-  try {
-    const { fan_id, catalog_item_id, price, payment_method } = req.body;
-    if (!fan_id || !price) return res.status(400).json({ error: 'fan_id et price sont obligatoires' });
-    const updatedFan = await recordManualSale({ fan_id, catalog_item_id: catalog_item_id || null, price, payment_method });
-    res.json({ ok: true, fan: updatedFan });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ---------- API Admin: coffre de contenu (organisation par catégorie) ----------
 // Les fichiers réels sont stockés dans Supabase Storage (bucket privé
 // "content-vault"), jamais exposés publiquement — seul ce serveur (clé
@@ -1258,7 +1449,7 @@ app.post('/api/admin/sales/manual', requireAdminToken, async (req, res) => {
 // résumé par catégorie (voir getVaultSummary / lib/claudeAgent.js).
 app.get('/api/admin/vault', requireAdminToken, async (req, res) => {
   try {
-    const assets = await listVaultAssets();
+    const assets = await listVaultAssets(req.tenantId);
     const withUrls = await Promise.all(
       assets.map(async (a) => {
         const { data } = await supabase.storage.from('content-vault').createSignedUrl(a.storage_path, 3600);
@@ -1286,7 +1477,7 @@ app.post('/api/admin/vault/upload', requireAdminToken, upload.array('files', 20)
         .upload(storagePath, file.buffer, { contentType: file.mimetype });
       if (uploadErr) throw uploadErr;
       const media_type = file.mimetype.startsWith('video/') ? 'video' : 'photo';
-      saved.push(await addVaultAsset({ category, media_type, storage_path: storagePath, catalog_item_id: catalog_item_id || null }));
+      saved.push(await addVaultAsset({ category, media_type, storage_path: storagePath, catalog_item_id: catalog_item_id || null, tenant_id: req.tenantId }));
     }
     res.json({ ok: true, uploaded: saved.length });
   } catch (err) {
@@ -1321,11 +1512,11 @@ const AI_OUTPUT_PRICE_PER_MTOK = 15;
 
 app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
   try {
-    const settings = await getSettings();
+    const settings = await getSettings(req.tenantId);
     const [dbStats, usage, stalled] = await Promise.all([
-      getLiveOpsStats(),
-      getAiUsageSince(settings.ai_credit_balance_updated_at || null),
-      getStalledConversations(5).catch((err) => {
+      getLiveOpsStats(req.tenantId),
+      getAiUsageSince(settings.ai_credit_balance_updated_at || null, req.tenantId),
+      getStalledConversations(req.tenantId, 5).catch((err) => {
         console.error('Erreur calcul conversations en attente de révision:', err.message);
         return [];
       }),
@@ -1344,7 +1535,7 @@ app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
     // est consulté régulièrement, et sans coût technique supplémentaire.
     const threshold = settings.low_credit_alert_threshold != null ? Number(settings.low_credit_alert_threshold) : 10;
     if (estimatedRemaining != null && estimatedRemaining <= threshold && !settings.low_credit_alert_sent) {
-      await markLowCreditAlertSent();
+      await markLowCreditAlertSent(req.tenantId);
       await maybeAlertAdmin(
         settings,
         `🪫 Crédit IA bas: il reste environ $${estimatedRemaining.toFixed(2)} (estimation). Recharge chez Anthropic puis mets à jour le solde dans le dashboard pour ne pas couper le bot.`
@@ -1354,7 +1545,10 @@ app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
     res.json({
       ...dbStats,
       stalledCount: stalled.length,
-      queueSize: fanQueues.size,
+      // Ne compte que les files d'attente de CE tenant — fanQueues est
+      // partagé entre toutes les créatrices depuis le passage multi-tenant
+      // (voir fanKey = `${tenantId}:${telegram_user_id}`).
+      queueSize: [...fanQueues.keys()].filter((k) => k.startsWith(`${req.tenantId}:`)).length,
       uptimeSeconds: Math.floor(process.uptime()),
       botGloballyPaused: !!settings.bot_globally_paused,
       aiCredit: {
@@ -1376,7 +1570,7 @@ app.put('/api/admin/ai-credit-balance', requireAdminToken, async (req, res) => {
   try {
     const amount = Number(req.body.amount);
     if (Number.isNaN(amount) || amount < 0) return res.status(400).json({ error: 'montant invalide' });
-    const updated = await setAiCreditBalance(amount);
+    const updated = await setAiCreditBalance(amount, req.tenantId);
     res.json({ ok: true, balance: updated.ai_credit_balance, updatedAt: updated.ai_credit_balance_updated_at });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1386,9 +1580,9 @@ app.put('/api/admin/ai-credit-balance', requireAdminToken, async (req, res) => {
 // ---------- API Admin: aperçu du prompt système actuel (débogage/transparence) ----------
 app.get('/api/admin/system-prompt-preview', requireAdminToken, async (req, res) => {
   try {
-    const settings = await getSettings();
-    const catalog = await getActiveCatalog();
-    const vaultSummary = await getVaultSummary();
+    const settings = await getSettings(req.tenantId);
+    const catalog = await getActiveCatalog(req.tenantId);
+    const vaultSummary = await getVaultSummary(req.tenantId);
     const fakeFan = {
       id: 'preview',
       last_active_at: new Date().toISOString(),
@@ -1408,7 +1602,7 @@ app.get('/api/admin/system-prompt-preview', requireAdminToken, async (req, res) 
 
 // ---------- API Admin: export CSV ----------
 app.get('/api/admin/export/fans.csv', requireAdminToken, async (req, res) => {
-  const { data } = await supabase.from('fans').select('*').order('created_at');
+  const { data } = await supabase.from('fans').select('*').eq('tenant_id', req.tenantId).order('created_at');
   const rows = ['id,telegram_username,first_name,status,total_spent,ab_variant,source_token,created_at'];
   (data || []).forEach((f) => {
     rows.push(
@@ -1423,7 +1617,11 @@ app.get('/api/admin/export/fans.csv', requireAdminToken, async (req, res) => {
 });
 
 app.get('/api/admin/export/sales.csv', requireAdminToken, async (req, res) => {
-  const { data } = await supabase.from('sales').select('*, fans(telegram_username, first_name)').order('created_at');
+  const { data } = await supabase
+    .from('sales')
+    .select('*, fans(telegram_username, first_name)')
+    .eq('tenant_id', req.tenantId)
+    .order('created_at');
   const rows = ['id,fan,price,status,payment_method,dropfans_link,created_at'];
   (data || []).forEach((s) => {
     const fanLabel = s.fans?.telegram_username || s.fans?.first_name || s.fan_id;
@@ -1439,10 +1637,16 @@ app.get('/api/admin/export/sales.csv', requireAdminToken, async (req, res) => {
 });
 
 // ---------- Setup webhook Telegram (à appeler une fois après déploiement) ----------
+// MISE À JOUR 30/08/2026 (multi-tenant) — Meely (tenant fondateur) garde son
+// URL de webhook historique sans tenant_id dans le chemin (voir
+// MEELY_TENANT_ID plus haut) ; toute autre créatrice reçoit l'URL avec son
+// propre tenant_id, celle utilisée par processTelegramUpdate() pour router
+// correctement chaque message vers le bon compte.
 app.post('/api/admin/setup-webhook', requireAdminToken, async (req, res) => {
-  const settings = await getSettings();
+  const settings = await getSettings(req.tenantId);
   const base = process.env.PUBLIC_BASE_URL;
-  const result = await setWebhook(settings.telegram_bot_token, `${base}/telegram/webhook`);
+  const path = req.tenantId === MEELY_TENANT_ID ? '/telegram/webhook' : `/telegram/webhook/${req.tenantId}`;
+  const result = await setWebhook(settings.telegram_bot_token, `${base}${path}`);
   res.json(result);
 });
 
@@ -1451,21 +1655,37 @@ app.post('/api/admin/setup-webhook', requireAdminToken, async (req, res) => {
 // pensée pour être appelée périodiquement par un service gratuit externe
 // (ex: cron-job.org) sur /api/cron/reengagement?key=CRON_SECRET.
 // Ça a aussi l'avantage de garder le service réveillé sur le plan free.
+// MISE À JOUR 30/08/2026 (multi-tenant) — boucle maintenant sur TOUTES les
+// créatrices actives (listActiveTenants), chacune avec son propre bot Telegram
+// et ses propres réglages (reengagement_hours, reengagement_message) — avant
+// cette route ne connaissait qu'un seul compte (Meely) codé en dur via
+// getSettings() sans argument.
 app.get('/api/cron/reengagement', async (req, res) => {
   if (!process.env.CRON_SECRET || req.query.key !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: 'unauthorized' });
   }
   try {
-    const settings = await getSettings();
-    const fans = await getFansForReengagement(settings.reengagement_hours);
-    let sent = 0;
-    for (const fan of fans) {
-      await sendMessage(settings.telegram_bot_token, fan.telegram_user_id, settings.reengagement_message);
-      await logMessage(fan.id, 'assistant', settings.reengagement_message);
-      await markReengaged(fan.id);
-      sent++;
+    const tenants = await listActiveTenants();
+    let totalCandidates = 0;
+    let totalSent = 0;
+    for (const tenant of tenants) {
+      try {
+        const settings = await getSettings(tenant.id);
+        const fans = await getFansForReengagement(tenant.id, settings.reengagement_hours);
+        totalCandidates += fans.length;
+        for (const fan of fans) {
+          await sendMessage(settings.telegram_bot_token, fan.telegram_user_id, settings.reengagement_message);
+          await logMessage(fan.id, 'assistant', settings.reengagement_message, false, tenant.id);
+          await markReengaged(fan.id);
+          totalSent++;
+        }
+      } catch (tenantErr) {
+        // Un problème sur UNE créatrice (ex: bot_token invalide) ne doit pas
+        // empêcher la relance de tourner pour toutes les autres.
+        console.error(`Erreur relance pour tenant ${tenant.id} (${tenant.name}):`, tenantErr.message);
+      }
     }
-    res.json({ ok: true, candidates: fans.length, sent });
+    res.json({ ok: true, tenants: tenants.length, candidates: totalCandidates, sent: totalSent });
   } catch (err) {
     console.error('Erreur relance:', err);
     res.status(500).json({ error: err.message });
