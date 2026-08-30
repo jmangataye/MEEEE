@@ -50,6 +50,8 @@ const {
   setAiCreditBalance,
   getLiveOpsStats,
   getStalledConversations,
+  listSettingsHistory,
+  restoreSettingsVersion,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
@@ -107,8 +109,13 @@ function splitIntoBubbles(text) {
 // on ne laisse jamais partir plus de MAX_BUBBLES messages Telegram distincts
 // pour une seule réponse — le reste est recollé au dernier bloc (une seule
 // bulle peut avoir plusieurs lignes, ça reste un seul message Telegram).
-const MAX_BUBBLES = 2;
-function capBubbles(bubbles, max = MAX_BUBBLES) {
+// MISE À JOUR 30/08/2026 — cette limite était figée en dur à 2 ; elle suit
+// maintenant "max_message_bubbles" (dashboard, Persona & Script → Rythme &
+// alertes), la même valeur qui pilote déjà l'instruction correspondante dans
+// le prompt (voir lib/claudeAgent.js). Le "2" reste le filet de sécurité par
+// défaut si le réglage est absent/invalide.
+const DEFAULT_MAX_BUBBLES = 2;
+function capBubbles(bubbles, max = DEFAULT_MAX_BUBBLES) {
   if (bubbles.length <= max) return bubbles;
   const kept = bubbles.slice(0, max - 1);
   const rest = bubbles.slice(max - 1).join('\n');
@@ -124,7 +131,8 @@ function stripInvertedPunctuation(text) {
 }
 
 async function replyToFan({ settings, chatId, fan, text }) {
-  const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
+  const maxBubbles = Number(settings.max_message_bubbles) || DEFAULT_MAX_BUBBLES;
+  const bubbles = capBubbles(splitIntoBubbles(text), maxBubbles).map(stripInvertedPunctuation);
   for (const bubble of bubbles) {
     await sendMessageWithTypingDelay(settings.telegram_bot_token, chatId, bubble, {
       minSeconds: settings.response_delay_min_seconds,
@@ -702,6 +710,29 @@ app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
   }
 });
 
+// ---------- API Admin: historique des versions du Persona & Script ----------
+// MISE À JOUR 30/08/2026 — chaque sauvegarde réussie de "settings" prend
+// désormais une photo dans settings_history (voir snapshotSettings, appelé
+// depuis updateSettings). Ces deux routes permettent au dashboard de lister
+// les versions passées et d'en restaurer une.
+app.get('/api/admin/settings/history', requireAdminToken, async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    res.json(await listSettingsHistory(limit));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/settings/history/:id/restore', requireAdminToken, async (req, res) => {
+  try {
+    res.json(await restoreSettingsVersion(req.params.id));
+  } catch (err) {
+    console.error('Erreur restauration réglages:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: connexion des alertes Telegram ----------
 // Voir lib/supabase.js (tryCaptureAdminChatId) et le webhook Telegram
 // ci-dessous ("/admin_CODE") : évite à Bryan de devoir trouver son chat_id à
@@ -913,10 +944,23 @@ app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, as
 });
 
 // ---------- API Admin: simulateur de conversation (sans Telegram) ----------
+// MISE À JOUR 30/08/2026 — "aperçu vivant" (dashboard, Persona & Script) :
+// le simulateur accepte maintenant un `settingsOverride` optionnel, fusionné
+// PAR-DESSUS les vrais réglages venant de la BDD, uniquement pour cet appel —
+// rien n'est jamais sauvegardé ici. Ça permet à Bryan de voir tout de suite
+// l'effet d'un changement (ton, script, politique appel vidéo, etc.) avant
+// de cliquer sur "Enregistrer", sans jamais toucher aux vrais réglages en
+// prod tant qu'il n'a pas validé. Déclenché uniquement par un clic explicite
+// côté dashboard (jamais à chaque frappe) pour ne pas multiplier les appels
+// Claude facturés — voir l'incident de crédit épuisé du 29/08.
 app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
   try {
-    const { message, history } = req.body; // history: [{role:'fan'|'assistant', content}]
-    const settings = await getSettings();
+    const { message, history, settingsOverride } = req.body; // history: [{role:'fan'|'assistant', content}]
+    const realSettings = await getSettings();
+    const settings =
+      settingsOverride && typeof settingsOverride === 'object'
+        ? { ...realSettings, ...settingsOverride }
+        : realSettings;
     const catalog = await getActiveCatalog();
     const vaultSummary = await getVaultSummary();
     const fakeFan = { id: 'test', last_active_at: new Date().toISOString(), memory_notes: '' };
@@ -928,7 +972,8 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
       fan: fakeFan,
       vaultSummary,
     });
-    const bubbles = capBubbles(splitIntoBubbles(text)).map(stripInvertedPunctuation);
+    const maxBubbles = Number(settings.max_message_bubbles) || DEFAULT_MAX_BUBBLES;
+    const bubbles = capBubbles(splitIntoBubbles(text), maxBubbles).map(stripInvertedPunctuation);
 
     // Même filtre de sécurité qu'en prod (voir handleIncomingMessage), mais en
     // mode "aperçu" seulement : rien n'est bloqué ni mis en pause ici, ça sert
