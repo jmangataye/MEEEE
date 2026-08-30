@@ -6,6 +6,17 @@ const { sendMessage } = require('./lib/telegram');
 
 async function run() {
   const settings = await getSettings();
+
+  // MISE À JOUR 30/08/2026 — bug trouvé lors de l'audit : ce cron tourne dans
+  // un processus séparé du serveur web, donc il ne savait rien du bouton
+  // "Mettre le bot en pause" (bot_globally_paused) ajouté le même jour —
+  // pauser le bot depuis le dashboard n'empêchait pas cette relance
+  // automatique de partir quand même à sa prochaine exécution programmée.
+  if (settings.bot_globally_paused) {
+    console.log('Bot en pause globale — relance automatique sautée pour cette exécution.');
+    return;
+  }
+
   const fans = await getFansForReengagement(settings.reengagement_hours);
   console.log(`Relance: ${fans.length} fan(s) à recontacter.`);
 

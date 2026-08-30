@@ -688,13 +688,22 @@ async function handleIncomingMessage(msg, opts = {}) {
         // autre message assistant, même si `fan` n'a pas pu être résolu plus
         // haut (dans ce cas on ne peut rien journaliser, mais c'est rarissime :
         // `getOrCreateFan` est justement la première chose qui échouerait).
+        //
+        // MISE À JOUR 30/08/2026 (v2, audit) — journaliser le repli ne suffisait
+        // pas : `get_stalled_conversations` ne regardait que `role = 'fan'`
+        // pour décider qu'une conversation attend une réponse. Ce repli étant
+        // loggé en `role: 'assistant'`, le fan redevenait invisible du panneau
+        // "En attente de révision" alors qu'il n'a JAMAIS eu de vraie réponse —
+        // exactement pendant une panne de crédit comme celle du 30/08, le
+        // moment où ce filet de sécurité est le plus utile. `is_fallback: true`
+        // dit à la fonction SQL de continuer à traiter ce fan comme "en attente".
         try {
           const fallbackFan = await getOrCreateFan({
             telegram_user_id: msg.from.id,
             telegram_username: msg.from.username,
             first_name: msg.from.first_name,
           });
-          await logMessage(fallbackFan.id, 'assistant', fallbackText);
+          await logMessage(fallbackFan.id, 'assistant', fallbackText, true);
         } catch (logErr) {
           console.error('Erreur journalisation message de repli:', logErr);
         }
@@ -902,8 +911,15 @@ app.delete('/api/admin/catalog/:id/preview', requireAdminToken, async (req, res)
 // ---------- API Admin: fans en direct + conversations ----------
 app.get('/api/admin/fans', requireAdminToken, async (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const fans = await listFansWithPreview({ limit });
+    // MISE À JOUR 30/08/2026 — plafond relevé (200 -> 2000) : maintenant que
+    // listFansWithPreview() découpe son .in() en petits lots, une limite plus
+    // large ne risque plus de reproduire le bug d'URL trop longue. `search`/
+    // `status` sont transmis pour filtrer côté serveur sur toute la table,
+    // pas seulement sur la page déjà chargée (voir listFansWithPreview).
+    const limit = Math.min(Number(req.query.limit) || 50, 2000);
+    const search = typeof req.query.search === 'string' ? req.query.search : '';
+    const status = typeof req.query.status === 'string' ? req.query.status : '';
+    const fans = await listFansWithPreview({ limit, search, status });
     res.json(fans);
   } catch (err) {
     res.status(500).json({ error: err.message });
