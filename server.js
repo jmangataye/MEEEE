@@ -36,6 +36,10 @@ const {
   listSafetyIncidents,
   resolveSafetyIncident,
   dismissStalledFan,
+  generateAdminSetupCode,
+  tryCaptureAdminChatId,
+  setFanAdminNote,
+  markLowCreditAlertSent,
   listVaultAssets,
   addVaultAsset,
   deleteVaultAsset,
@@ -248,17 +252,12 @@ const BATCH_MAX_WAIT_MS = 15000;
 async function enqueueFanMessage(fanKey, msg) {
   let batch = pendingBatches.get(fanKey);
   if (!batch) {
-    // Fan + historique capturés une seule fois, au premier message du lot —
-    // pour que l'appel groupé voie exactement le même contexte qu'un appel
-    // normal (l'historique ne doit pas inclure les messages de ce lot, qui
-    // seront fournis groupés comme "fanMessage" au moment du traitement).
     const fan = await getOrCreateFan({
       telegram_user_id: msg.from.id,
       telegram_username: msg.from.username,
       first_name: msg.from.first_name,
     });
-    const history = await getRecentHistory(fan.id, 20);
-    batch = { fan, from: msg.from, chatId: msg.chat.id, history, texts: [], firstAt: Date.now(), timer: null };
+    batch = { fan, from: msg.from, chatId: msg.chat.id, texts: [], firstAt: Date.now(), timer: null };
     pendingBatches.set(fanKey, batch);
   }
 
@@ -270,12 +269,29 @@ async function enqueueFanMessage(fanKey, msg) {
   const wait = Math.max(0, Math.min(BATCH_DEBOUNCE_MS, BATCH_MAX_WAIT_MS - elapsed));
   batch.timer = setTimeout(() => {
     pendingBatches.delete(fanKey);
-    runSerializedForFan(fanKey, () =>
-      handleIncomingMessage(
+    runSerializedForFan(fanKey, async () => {
+      // MISE À JOUR 30/08/2026 — bug trouvé en analysant une vraie conversation
+      // (fan "Adriano") : l'historique était avant capturé au moment de la
+      // CRÉATION du lot (juste au-dessus), pas au moment où ce tour s'exécute
+      // réellement. Comme l'exécution est sérialisée par fan (voir
+      // runSerializedForFan), un fan qui relançait juste après avoir reçu une
+      // première réponse (mais avant qu'elle soit visible dans l'historique,
+      // à cause du délai de frappe simulé) déclenchait un DEUXIÈME lot dont
+      // l'historique pré-capturé ne contenait PAS la réponse qu'on venait tout
+      // juste de lui envoyer — l'IA répondait donc deux fois la même chose
+      // sans le savoir. On récupère maintenant l'historique ICI, une fois que
+      // c'est vraiment le tour sérialisé de ce fan (donc après qu'un tour
+      // précédent encore "en vol" ait fini d'envoyer/journaliser ses
+      // réponses) — en excluant les messages de CE lot (déjà journalisés
+      // ci-dessus, ils sont fournis séparément comme "fanMessage") via le
+      // filtre sur `firstAt`.
+      const raw = await getRecentHistory(batch.fan.id, 20 + batch.texts.length + 5);
+      const history = raw.filter((m) => new Date(m.created_at).getTime() < batch.firstAt).slice(-20);
+      return handleIncomingMessage(
         { chat: { id: batch.chatId }, from: batch.from, text: batch.texts.join('\n') },
-        { skipLogging: true, historyOverride: batch.history }
-      )
-    ).catch((err) => console.error('Erreur traitement lot de messages fan:', err));
+        { skipLogging: true, historyOverride: history }
+      );
+    }).catch((err) => console.error('Erreur traitement lot de messages fan:', err));
   }, wait);
 }
 
@@ -295,6 +311,27 @@ app.post('/telegram/webhook', async (req, res) => {
     if (msg.text) {
       if (msg.text.startsWith('/start')) {
         await runSerializedForFan(fanKey, () => handleIncomingMessage(msg));
+        return;
+      }
+      // ---------- Capture automatique du chat_id admin ----------
+      // Voir lib/supabase.js (tryCaptureAdminChatId) : Bryan génère un code
+      // depuis le dashboard puis s'envoie lui-même "/admin_CODE" sur Telegram
+      // — jamais journalisé comme message de fan, ne crée pas de fan, ne
+      // passe jamais par le lot/l'IA.
+      if (msg.text.startsWith('/admin_')) {
+        const code = msg.text.slice('/admin_'.length).trim();
+        try {
+          const captured = await tryCaptureAdminChatId(code, msg.chat.id);
+          await sendMessage(
+            (await getSettings()).telegram_bot_token,
+            msg.chat.id,
+            captured
+              ? '✅ Alertes Telegram activées — tu recevras ici les ventes VIP et les incidents de sécurité.'
+              : '❌ Code invalide ou expiré — régénère un code depuis le dashboard (Réglages → Rythme & alertes) et réessaie.'
+          );
+        } catch (err) {
+          console.error('Erreur capture chat_id admin:', err);
+        }
         return;
       }
       await enqueueFanMessage(fanKey, msg);
@@ -383,7 +420,7 @@ async function handleIncomingMessage(msg, opts = {}) {
     // problème est détecté, on n'envoie JAMAIS ce texte — on envoie un message
     // de repli fixe, on journalise l'incident, on met la conversation en pause
     // automatiquement, et on alerte l'admin pour qu'il reprenne la main.
-    const textReview = reviewOutgoingText({ text, catalog, settings });
+    const textReview = reviewOutgoingText({ text, catalog, settings, fanText: msg.text });
     if (!textReview.ok) {
       console.error(`⚠️ Filtre de sécurité (texte) déclenché pour fan ${fan.id}:`, textReview.reasons, '| texte bloqué:', text);
       await logSafetyIncident({ fan_id: fan.id, reasons: textReview.reasons, flagged_text: text });
@@ -576,6 +613,34 @@ app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
   }
 });
 
+// ---------- API Admin: connexion des alertes Telegram ----------
+// Voir lib/supabase.js (tryCaptureAdminChatId) et le webhook Telegram
+// ci-dessous ("/admin_CODE") : évite à Bryan de devoir trouver son chat_id à
+// la main (jamais fait en pratique — c'est pour ça qu'aucune alerte ne
+// partait jamais avant le 30/08/2026).
+app.post('/api/admin/generate-setup-code', requireAdminToken, async (req, res) => {
+  try {
+    const code = await generateAdminSetupCode();
+    const settings = await getSettings();
+    res.json({ code, botUsername: settings.telegram_bot_username || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/test-alert', requireAdminToken, async (req, res) => {
+  try {
+    const settings = await getSettings();
+    if (!settings.admin_telegram_chat_id) {
+      return res.status(400).json({ error: 'Aucun chat_id enregistré — connecte les alertes ci-dessus d\'abord.' });
+    }
+    await sendMessage(settings.telegram_bot_token, settings.admin_telegram_chat_id, '🔔 Test réussi — les alertes Meeli arrivent bien ici.');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: catalogue ----------
 app.get('/api/admin/catalog', requireAdminToken, async (req, res) => {
   const { data, error } = await supabase.from('catalog_items').select('*').order('sort_order');
@@ -651,6 +716,21 @@ app.post('/api/admin/fans/:id/message', requireAdminToken, async (req, res) => {
     if (!fan) return res.status(404).json({ error: 'fan introuvable' });
     await sendMessage(settings.telegram_bot_token, fan.telegram_user_id, text);
     await logMessage(fan.id, 'assistant', text);
+    // Optionnel : reprendre l'IA dans la foulée (case à cocher côté dashboard)
+    // — pratique quand l'admin vient de débloquer une situation à la main et
+    // veut que l'IA reprenne automatiquement sur le prochain message du fan.
+    if (req.body.unpause) await setFanPaused(fan.id, false);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: note manuelle libre sur un fan (distincte des notes
+// écrites par l'IA) — voir lib/supabase.js:setFanAdminNote.
+app.put('/api/admin/fans/:id/note', requireAdminToken, async (req, res) => {
+  try {
+    await setFanAdminNote(req.params.id, req.body.note || '');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -725,7 +805,7 @@ app.post('/api/admin/test-chat', requireAdminToken, async (req, res) => {
     // Même filtre de sécurité qu'en prod (voir handleIncomingMessage), mais en
     // mode "aperçu" seulement : rien n'est bloqué ni mis en pause ici, ça sert
     // juste à tester/ajuster le script sans attendre qu'un vrai fan tombe dessus.
-    const safety = reviewOutgoingText({ text, catalog, settings });
+    const safety = reviewOutgoingText({ text, catalog, settings, fanText: message });
     const reasons = [...safety.reasons];
     toolCalls.forEach((c) => {
       if (c.name !== 'send_offer') return;
@@ -896,6 +976,22 @@ app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
       (usage.input / 1e6) * AI_INPUT_PRICE_PER_MTOK + (usage.output / 1e6) * AI_OUTPUT_PRICE_PER_MTOK;
     const balance = settings.ai_credit_balance != null ? Number(settings.ai_credit_balance) : null;
     const estimatedRemaining = balance != null ? Math.max(0, balance - spentUsd) : null;
+
+    // ---------- Alerte crédit IA bas ----------
+    // Avant : aucune alerte n'existait — le bot est déjà tombé en panne une
+    // fois pour crédit épuisé sans que personne ne le sache avant qu'un fan ne
+    // s'en plaigne (voir l'audit). Le solde n'étant qu'une estimation vérifiée
+    // à chaque chargement du dashboard (pas de webhook Anthropic), l'alerte se
+    // déclenche ici au lieu d'un vrai cron — suffisant tant que le dashboard
+    // est consulté régulièrement, et sans coût technique supplémentaire.
+    const threshold = settings.low_credit_alert_threshold != null ? Number(settings.low_credit_alert_threshold) : 10;
+    if (estimatedRemaining != null && estimatedRemaining <= threshold && !settings.low_credit_alert_sent) {
+      await markLowCreditAlertSent();
+      await maybeAlertAdmin(
+        settings,
+        `🪫 Crédit IA bas: il reste environ $${estimatedRemaining.toFixed(2)} (estimation). Recharge chez Anthropic puis mets à jour le solde dans le dashboard pour ne pas couper le bot.`
+      );
+    }
 
     res.json({
       ...dbStats,

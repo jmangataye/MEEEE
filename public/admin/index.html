@@ -43,6 +43,10 @@
   a{color:var(--blue);text-decoration:none}
   a:hover{text-decoration:underline}
   ::selection{background:var(--accent-soft)}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:20px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--muted-2)}
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:var(--surface-2);border-radius:8px}
   ::-webkit-scrollbar-track{background:transparent}
@@ -174,6 +178,8 @@
   .pill-off{background:rgba(248,113,113,.13);color:var(--red)}
   .chip{font-size:.68rem;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(45,212,191,.15);color:var(--teal)}
   .chip-warn{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:600;color:var(--accent-2)}
+  .chip-ok{display:inline-flex;align-items:center;gap:4px;font-size:.78rem;font-weight:700;color:var(--green);background:rgba(52,211,153,.14);padding:6px 12px;border-radius:20px}
+  .paying-badge{display:inline-flex;align-items:center;gap:3px;font-size:.68rem;font-weight:700;color:#181000;background:linear-gradient(135deg,var(--accent),var(--accent-2));padding:2px 7px;border-radius:20px;margin-left:6px;vertical-align:middle}
   .chip-warn svg{width:12px;height:12px}
 
   .muted{color:var(--muted);font-size:.8rem}
@@ -222,8 +228,10 @@
 
   /* ---------- live / conversations ---------- */
   .live-layout{display:grid;grid-template-columns:290px 1fr;gap:16px}
-  .fan-list{max-height:calc(100vh - 200px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
-  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;cursor:pointer}
+  .fan-filters{display:flex;gap:8px;margin-bottom:8px}
+  .fan-filters select{width:auto;flex:0 0 auto}
+  .fan-list{max-height:calc(100vh - 250px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;cursor:pointer;transition:background .15s ease}
   .fan-item.potential-hot{border-left-color:var(--green)}
   .fan-item.potential-cold{border-left-color:var(--blue)}
   .fan-item:hover{background:var(--surface-2)}
@@ -252,6 +260,14 @@
   .msg.fan{align-self:flex-start;background:var(--surface-2);border-bottom-left-radius:4px}
   .msg.assistant{align-self:flex-end;background:linear-gradient(135deg,rgba(244,183,64,.22),rgba(255,138,92,.22));
       border:1px solid rgba(244,183,64,.25);border-bottom-right-radius:4px}
+  .msg-time{display:block;margin-top:4px;font-size:.64rem;opacity:.55;text-align:right;letter-spacing:.02em}
+  .typing-dots{align-self:flex-start;display:inline-flex;gap:4px;padding:11px 15px;background:var(--surface-2);border-radius:14px;border-bottom-left-radius:4px}
+  .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--muted-2);animation:typing-bounce 1.1s ease-in-out infinite}
+  .typing-dots span:nth-child(2){animation-delay:.15s}
+  .typing-dots span:nth-child(3){animation-delay:.3s}
+  @keyframes typing-bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+  .panel-body{overflow:hidden;max-height:0;opacity:0;transition:max-height .32s ease,opacity .25s ease}
+  .panel-body.open{max-height:900px;opacity:1}
 
   /* ---------- banners ---------- */
   .banner{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;
@@ -367,6 +383,10 @@
   #salesTable tbody tr.row-sent{border-left-color:var(--border)}
 
   /* ---------- fan list : besoin d'attention (pause + dernier message du fan) ---------- */
+  .panel-toggle-head{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+  .panel-toggle-head:hover{opacity:.85}
+  .panel-chevron{font-size:.8rem;color:var(--muted);transition:transform .15s ease}
+  .panel-chevron.open{transform:rotate(90deg)}
   .fan-item .attn-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent-2);
       box-shadow:0 0 0 3px rgba(255,138,92,.18);margin-right:2px}
 
@@ -511,22 +531,48 @@
         <div>Cette liste se rafraîchit automatiquement toutes les <strong>5 secondes</strong>. L'anneau autour de chaque avatar indique le statut du fan.</div>
       </div>
       <div class="panel" id="stalledPanel" style="display:none">
-        <h3>⏳ En attente de révision</h3>
-        <p class="muted" style="margin-top:-6px">Le fan a écrit en dernier, l'IA n'est pas en pause, mais aucune réponse n'est partie depuis plusieurs minutes — la conversation semble bloquée. Clique pour l'ouvrir et reprendre la main.</p>
-        <div id="stalledList"></div>
+        <h3 class="panel-toggle-head" onclick="togglePanel('stalled')">
+          <span>⏳ En attente de révision <span class="pill" id="stalledCountPill" style="margin-left:4px"></span></span>
+          <span class="panel-chevron" id="stalledChevron">▸</span>
+        </h3>
+        <div id="stalledBody" class="panel-body">
+          <p class="muted" style="margin-top:-6px">Le fan a écrit en dernier, l'IA n'est pas en pause, mais aucune réponse n'est partie depuis plusieurs minutes — la conversation semble bloquée. Clique pour l'ouvrir et reprendre la main.</p>
+          <div id="stalledList"></div>
+        </div>
       </div>
       <div class="panel" id="safetyPanel" style="display:none">
-        <h3>🚨 Alertes de sécurité récentes</h3>
-        <p class="muted" style="margin-top:-6px">Réponses ou offres bloquées automatiquement par le filtre serveur (contenu hors catalogue, prix inventé, méthode de paiement non autorisée). La conversation concernée est mise en pause automatiquement.</p>
-        <div id="safetyList"></div>
+        <h3 class="panel-toggle-head" onclick="togglePanel('safety')">
+          <span>🚨 Alertes de sécurité récentes <span class="pill" id="safetyCountPill" style="margin-left:4px"></span></span>
+          <span class="panel-chevron" id="safetyChevron">▸</span>
+        </h3>
+        <div id="safetyBody" class="panel-body">
+          <p class="muted" style="margin-top:-6px">Réponses ou offres bloquées automatiquement par le filtre serveur (contenu hors catalogue, prix inventé, méthode de paiement non autorisée). La conversation concernée est mise en pause automatiquement.</p>
+          <div id="safetyList"></div>
+        </div>
       </div>
       <div class="live-layout">
-        <div class="fan-list" id="fanList"></div>
+        <div>
+          <div class="fan-filters">
+            <input id="fanSearchInput" placeholder="🔎 Chercher (nom, @, id)..." oninput="renderFanList()" />
+            <select id="fanStatusFilter" onchange="renderFanList()">
+              <option value="">Tous les statuts</option>
+              <option value="new">new</option>
+              <option value="qualified">qualified</option>
+              <option value="customer">customer</option>
+              <option value="vip">vip</option>
+              <option value="paused">⏸ pausé</option>
+            </select>
+          </div>
+          <div class="fan-list" id="fanList"></div>
+        </div>
         <div class="thread-card">
           <div class="thread-header muted" id="fanHeader">Sélectionne un fan à gauche</div>
           <div class="thread" id="thread"></div>
           <div class="composer" id="composerWrap" style="display:none">
             <input id="composerInput" placeholder="Écris toi-même à ce fan pendant que l'IA est en pause..." onkeydown="if(event.key==='Enter')sendManualMessage()" />
+            <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--muted);white-space:nowrap">
+              <input type="checkbox" id="composerUnpause" style="width:auto" /> reprendre l'IA après
+            </label>
             <button class="btn btn-primary btn-sm" onclick="sendManualMessage()">Envoyer</button>
           </div>
         </div>
@@ -570,7 +616,7 @@
       <div class="page-head"><h2>Persona &amp; Script</h2><p>La personnalité de l'IA et ses règles de vente.</p></div>
       <div class="banner warn" id="chatIdWarning" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21.5 20h-19L12 3.5z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>
-        <div><strong>Aucun chat_id Telegram configuré</strong> — tu ne reçois pas les alertes VIP / grosses ventes. Renseigne-le dans "Alertes" ci-dessous.</div>
+        <div><strong>Aucun chat_id Telegram configuré</strong> — tu ne reçois pas les alertes VIP / grosses ventes. Connecte-toi en un clic dans "Alertes" ci-dessous.</div>
       </div>
 
       <div class="subtab-row">
@@ -696,7 +742,7 @@
         <div class="row">
           <div><label>Seuil VIP (dépensés)</label><input id="vip_threshold" type="number" step="0.01" /></div>
           <div><label>Alerte dès qu'un lien dépasse</label><input id="alert_min_sale" type="number" step="0.01" /></div>
-          <div><label>Ton chat_id Telegram (pour recevoir les alertes)</label><input id="admin_telegram_chat_id" /></div>
+          <div><label>Alerte crédit IA sous (USD)</label><input id="low_credit_alert_threshold" type="number" step="0.01" /></div>
         </div>
         <div class="row">
           <div><label>Relance après (heures d'inactivité)</label><input id="reengagement_hours" type="number" /></div>
@@ -705,6 +751,15 @@
         <textarea id="reengagement_message"></textarea>
         <br />
         <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+      </div>
+      </div>
+
+      <div class="persona-section" data-psec-panel="alertes" style="display:none">
+      <div class="panel" id="telegramAlertPanel">
+        <h3>📲 Connexion des alertes Telegram</h3>
+        <p class="muted" style="margin-top:-6px">Ventes VIP et incidents de sécurité arrivent ici, sur TON propre Telegram — sans ça, rien ne t'est jamais notifié en dehors du dashboard.</p>
+        <div id="telegramAlertBody"></div>
+        <input type="hidden" id="admin_telegram_chat_id" />
       </div>
       </div>
     </div>
@@ -1082,11 +1137,61 @@ async function loadSettings(){
     'script_qualification','script_tease','script_closing','script_upsell',
     'preferred_expressions','banned_words','emoji_frequency','allowed_emojis','slang_intensity',
     'min_custom_price','max_negotiation_discount_pct','telegram_bot_username','currency_symbol','response_delay_min_seconds',
-    'response_delay_max_seconds','vip_threshold','alert_min_sale','admin_telegram_chat_id','reengagement_hours','reengagement_message'];
+    'response_delay_max_seconds','vip_threshold','alert_min_sale','admin_telegram_chat_id','reengagement_hours','reengagement_message',
+    'low_credit_alert_threshold'];
   fields.forEach(f => { const el = document.getElementById(f); if (el) el.value = s[f] ?? ''; });
   currencySymbol = s.currency_symbol || '$';
   const warn = document.getElementById('chatIdWarning');
   if (warn) warn.style.display = s.admin_telegram_chat_id ? 'none' : 'flex';
+  renderTelegramAlertPanel(s);
+}
+
+// ---------- Connexion des alertes Telegram (voir server.js: /admin_CODE) ----------
+function renderTelegramAlertPanel(s){
+  const body = document.getElementById('telegramAlertBody');
+  if (!body) return;
+  if (s.admin_telegram_chat_id) {
+    body.innerHTML = `
+      <div class="row" style="align-items:center">
+        <div class="chip-ok" style="flex:0 0 auto">✅ Connecté</div>
+        <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="sendTestAlert()">🔔 Envoyer une alerte test</button></div>
+        <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="generateSetupCode()">Reconnecter à un autre compte</button></div>
+      </div>`;
+  } else {
+    body.innerHTML = `
+      <div class="row" style="align-items:center">
+        <div style="flex:0"><button class="btn btn-primary btn-sm" onclick="generateSetupCode()">🔑 Générer mon code de connexion</button></div>
+        <div class="muted" style="font-size:.8rem">Aucun compte connecté pour l'instant.</div>
+      </div>
+      <div id="setupCodeInstructions"></div>`;
+  }
+}
+
+async function generateSetupCode(){
+  try {
+    const { code, botUsername } = await api('/api/admin/generate-setup-code', { method:'POST' });
+    const box = document.getElementById('telegramAlertBody');
+    box.innerHTML = `
+      <div class="prompt-preview" style="margin-top:0">
+        <p style="margin:0 0 8px">1. Ouvre Telegram, va sur ${botUsername ? `<strong>@${botUsername}</strong>` : 'ton bot'}<br/>
+        2. Envoie-lui exactement ce message :</p>
+        <div style="font-family:monospace;font-size:1.05rem;font-weight:700;color:var(--accent);background:var(--bg-soft);border-radius:var(--radius-sm);padding:10px 14px;display:inline-block">/admin_${code}</div>
+        <p class="muted" style="margin:10px 0 0">Une fois le message envoyé, reviens ici et rafraîchis pour voir "✅ Connecté".</p>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="loadSettings()">J'ai envoyé le message ↻</button>
+      </div>`;
+    showToast('Code généré — suis les instructions ci-dessous.');
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  }
+}
+
+async function sendTestAlert(){
+  try {
+    await api('/api/admin/test-alert', { method:'POST' });
+    showToast('Alerte test envoyée ✅ — regarde ton Telegram.');
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  }
 }
 
 async function saveSettings(){
@@ -1095,7 +1200,7 @@ async function saveSettings(){
     'preferred_expressions','banned_words','emoji_frequency','allowed_emojis','slang_intensity',
     'telegram_bot_username','currency_symbol','admin_telegram_chat_id','reengagement_message'];
   const numFields = ['min_custom_price','max_negotiation_discount_pct','response_delay_min_seconds',
-    'response_delay_max_seconds','vip_threshold','alert_min_sale','reengagement_hours'];
+    'response_delay_max_seconds','vip_threshold','alert_min_sale','reengagement_hours','low_credit_alert_threshold'];
   const payload = {};
   fields.forEach(f => payload[f] = document.getElementById(f).value);
   numFields.forEach(f => payload[f] = parseFloat(document.getElementById(f).value));
@@ -1561,8 +1666,25 @@ function profileBlock(label, value, danger){
   return `<div class="profile-row${danger?' danger':''}"><span class="profile-label">${label}</span>${value}</div>`;
 }
 
+let lastFansData = [];
 async function loadFans(){
-  const fans = await api('/api/admin/fans');
+  lastFansData = await api('/api/admin/fans');
+  renderFanList();
+  if (selectedFanId) loadThread(selectedFanId, true);
+}
+
+// Séparé de loadFans() pour pouvoir re-filtrer instantanément (recherche,
+// filtre de statut) sans refaire un appel réseau à chaque frappe — demandé le
+// 30/08 : impossible avant de chercher/filtrer la liste des fans.
+function renderFanList(){
+  const q = (document.getElementById('fanSearchInput')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('fanStatusFilter')?.value || '';
+  let fans = lastFansData;
+  if (statusFilter === 'paused') fans = fans.filter(f => f.paused);
+  else if (statusFilter) fans = fans.filter(f => !f.paused && f.status === statusFilter);
+  if (q) {
+    fans = fans.filter(f => `${f.telegram_username||''} ${f.first_name||''} ${f.telegram_user_id||''}`.toLowerCase().includes(q));
+  }
   document.getElementById('fanList').innerHTML = fans.map(f => {
     // Un fan en pause dont le dernier message vient de lui attend une réponse
     // manuelle — on le signale par un point distinct pour le repérer d'un
@@ -1580,14 +1702,19 @@ async function loadFans(){
       </div>
     </div>
   `;
-  }).join('') || "<div class=\"muted\" style=\"padding:14px\">Aucun fan pour l'instant</div>";
-  if (selectedFanId) loadThread(selectedFanId, true);
+  }).join('') || `<div class="muted" style="padding:14px">${lastFansData.length ? 'Aucun résultat pour ce filtre' : "Aucun fan pour l'instant"}</div>`;
 }
 
 async function openFan(id){
   selectedFanId = id;
   document.querySelectorAll('.fan-item').forEach(el => el.classList.remove('active'));
   loadFans();
+  // Petit indicateur "en train d'écrire" pendant le chargement du fil — évite
+  // l'écran vide d'une fraction de seconde et rend la bascule entre fans plus
+  // vivante (demandé le 30/08 : "ajoute des animations dans les chats").
+  const threadEl = document.getElementById('thread');
+  if (threadEl) threadEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  threadMessageCounts[id] = 0;
   loadThread(id);
 }
 
@@ -1610,6 +1737,13 @@ async function loadThread(id, silent){
       ${profileBlock('❤️ Intérêts', f.interests_notes)}
       ${profileBlock('🤔 Objections', f.objections_notes)}
       ${profileBlock('⚠️ Alerte', f.red_flags_notes, true)}
+      <div class="profile-row" style="align-items:flex-start">
+        <span class="profile-label">📌 Ta note</span>
+        <div style="flex:1;display:flex;gap:6px;align-items:flex-start">
+          <textarea id="adminNoteInput" placeholder="Note perso (visible seulement par toi, jamais par l'IA)" style="min-height:34px;font-size:.82rem">${f.admin_note || ''}</textarea>
+          <button class="btn btn-ghost btn-sm" style="flex:0 0 auto" onclick="saveAdminNote('${f.id}')">💾</button>
+        </div>
+      </div>
     </div>
   `;
   // On n'anime l'apparition que des messages réellement nouveaux depuis le
@@ -1619,7 +1753,8 @@ async function loadThread(id, silent){
   const previousCount = threadMessageCounts[id] || 0;
   document.getElementById('thread').innerHTML = data.messages.map((m, i) => {
     const isNew = i >= previousCount && previousCount > 0;
-    return `<div class="msg ${m.role==='fan'?'fan':'assistant'}${isNew ? ' msg-in' : ''}">${m.content}</div>`;
+    const time = m.created_at ? new Date(m.created_at).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '';
+    return `<div class="msg ${m.role==='fan'?'fan':'assistant'}${isNew ? ' msg-in' : ''}">${m.content}${time ? `<span class="msg-time">${time}</span>` : ''}</div>`;
   }).join('');
   threadMessageCounts[id] = data.messages.length;
   document.getElementById('composerWrap').style.display = f.paused ? 'flex' : 'none';
@@ -1631,13 +1766,40 @@ async function togglePause(id, paused){
   loadFans();
 }
 
+async function saveAdminNote(id){
+  const val = document.getElementById('adminNoteInput').value;
+  try {
+    await api('/api/admin/fans/'+id+'/note', { method:'PUT', body: JSON.stringify({ note: val }) });
+    showToast('Note enregistrée ✅');
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  }
+}
+
 async function sendManualMessage(){
   const input = document.getElementById('composerInput');
   const text = input.value.trim();
   if (!text || !selectedFanId) return;
+  const unpauseBox = document.getElementById('composerUnpause');
+  const unpause = !!(unpauseBox && unpauseBox.checked);
   input.value = '';
-  await api('/api/admin/fans/'+selectedFanId+'/message', { method:'POST', body: JSON.stringify({ text }) });
+  await api('/api/admin/fans/'+selectedFanId+'/message', { method:'POST', body: JSON.stringify({ text, unpause }) });
+  if (unpauseBox) unpauseBox.checked = false;
   loadThread(selectedFanId, true);
+  loadFans();
+}
+
+// Les panneaux "en attente de révision" / "alertes sécurité" peuvent afficher
+// beaucoup d'entrées et prendre trop de place visuellement — repliés par
+// défaut, avec juste le nombre d'éléments visible, et un chevron pour les
+// déplier. L'état replié/déplié est mémorisé ici (pas par élément) pour
+// survivre aux rafraîchissements automatiques toutes les 5s.
+const panelCollapsed = { stalled: true, safety: true };
+function togglePanel(key){
+  panelCollapsed[key] = !panelCollapsed[key];
+  const open = !panelCollapsed[key];
+  document.getElementById(key+'Body').classList.toggle('open', open);
+  document.getElementById(key+'Chevron').classList.toggle('open', open);
 }
 
 async function loadSafetyIncidents(){
@@ -1645,10 +1807,11 @@ async function loadSafetyIncidents(){
   const panel = document.getElementById('safetyPanel');
   if (!incidents || !incidents.length) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
+  document.getElementById('safetyCountPill').textContent = incidents.length;
   document.getElementById('safetyList').innerHTML = incidents.slice(0, 10).map(i => `
     <div class="safety-item">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}</div>
+        <div class="muted" style="font-size:.72rem">${new Date(i.created_at).toLocaleString()} — ${i.fans && i.fans.telegram_username ? '@'+i.fans.telegram_username : (i.fans && i.fans.first_name) || i.fan_id}${i.fans && Number(i.fans.total_spent) > 0 ? '<span class="paying-badge">💰 client</span>' : ''}</div>
         <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;padding:3px 9px;font-size:.7rem" onclick="resolveSafetyIncident('${i.id}')">✓ Traité</button>
       </div>
       <div style="font-size:.82rem">${(i.reasons||[]).join('; ')}</div>
@@ -1679,10 +1842,11 @@ async function loadStalledConversations(){
   const panel = document.getElementById('stalledPanel');
   if (!stalled || !stalled.length) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
+  document.getElementById('stalledCountPill').textContent = stalled.length;
   document.getElementById('stalledList').innerHTML = stalled.slice(0, 15).map(s => `
     <div class="safety-item" style="cursor:pointer" onclick="showTab('live');openFan('${s.fan_id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div class="muted" style="font-size:.72rem">${fmtMinutesAgo(s.minutes_since)} — ${s.telegram_username ? '@'+s.telegram_username : (s.first_name || s.telegram_user_id)}</div>
+        <div class="muted" style="font-size:.72rem">${fmtMinutesAgo(s.minutes_since)} — ${s.telegram_username ? '@'+s.telegram_username : (s.first_name || s.telegram_user_id)}${Number(s.total_spent) > 0 ? '<span class="paying-badge">💰 client</span>' : ''}</div>
         <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;padding:3px 9px;font-size:.7rem" onclick="event.stopPropagation();dismissStalledFan('${s.fan_id}')">✓ Traité</button>
       </div>
       <div class="muted" style="font-size:.78rem;font-style:italic">"${(s.last_message||'').slice(0,180)}"</div>
