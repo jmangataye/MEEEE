@@ -36,6 +36,7 @@ const {
   listSafetyIncidents,
   resolveSafetyIncident,
   dismissStalledFan,
+  getFanCountByCountry,
   generateAdminSetupCode,
   tryCaptureAdminChatId,
   setFanAdminNote,
@@ -54,7 +55,7 @@ const {
   restoreSettingsVersion,
   supabase,
 } = require('./lib/supabase');
-const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
+const { runAgentTurn, buildSystemPrompt, generateScriptSuggestion } = require('./lib/claudeAgent');
 const { sendMessage, sendPhoto, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
 const {
@@ -225,6 +226,16 @@ async function handleNonTextMessage(msg, mediaType) {
     const meta = MEDIA_TYPE_REPLIES[mediaType] || MEDIA_TYPE_REPLIES.document;
     await logMessage(fan.id, 'fan', meta.log);
 
+    // MISE À JOUR 30/08/2026 — pause globale (dashboard, Vue d'ensemble), à ne
+    // pas confondre avec la pause par fan juste en dessous : ici RIEN ne
+    // répond à PERSONNE tant que Bryan n'a pas réactivé depuis le dashboard.
+    // Le message reste journalisé (rien n'est perdu), seule la réponse auto
+    // est coupée.
+    if (settings.bot_globally_paused) {
+      console.log(`Bot en pause globale — média (${mediaType}) reçu de fan ${fan.id}, pas de réponse automatique.`);
+      return;
+    }
+
     // Même règle que pour le texte : si la conversation est en pause, on
     // journalise mais on ne répond pas automatiquement.
     if (fan.paused) {
@@ -383,6 +394,29 @@ async function handleIncomingMessage(msg, opts = {}) {
   try {
     const chatId = msg.chat.id;
     const settings = await getSettings();
+
+    // MISE À JOUR 30/08/2026 — pause globale (dashboard, Vue d'ensemble).
+    // Différent de la pause par fan plus bas : ici on journalise quand même le
+    // message reçu (pour ne rien perdre) mais on ne répond à AUCUN fan tant
+    // que ce n'est pas réactivé — utile si Bryan veut couper les réponses
+    // automatiques le temps de vérifier/ajuster quelque chose sans risquer
+    // qu'un fan reçoive une réponse pendant ce temps.
+    if (settings.bot_globally_paused) {
+      if (!skipLogging) {
+        try {
+          const fan = await getOrCreateFan({
+            telegram_user_id: msg.from.id,
+            telegram_username: msg.from.username,
+            first_name: msg.from.first_name,
+          });
+          await logMessage(fan.id, 'fan', msg.text);
+        } catch (logErr) {
+          console.error('Erreur journalisation pendant pause globale:', logErr.message);
+        }
+      }
+      console.log('Bot en pause globale — message reçu, pas de réponse automatique.');
+      return;
+    }
 
     if (msg.text.startsWith('/start')) {
       const parts = msg.text.split(' ');
@@ -624,6 +658,7 @@ async function handleIncomingMessage(msg, opts = {}) {
         if (call.input.interests_notes) patch.interests_notes = call.input.interests_notes;
         if (call.input.objections_notes) patch.objections_notes = call.input.objections_notes;
         if (call.input.red_flags_notes) patch.red_flags_notes = call.input.red_flags_notes;
+        if (call.input.country) patch.country = call.input.country;
         await updateFanProfile(fan.id, patch);
       }
     }
@@ -706,6 +741,40 @@ app.put('/api/admin/settings', requireAdminToken, async (req, res) => {
     res.json(await updateSettings(req.body));
   } catch (err) {
     console.error('Erreur mise à jour réglages:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: pause/reprise globale du bot ----------
+// MISE À JOUR 30/08/2026 — bouton demandé par Bryan pour couper toute réponse
+// automatique en un clic (Vue d'ensemble), sans passer par le formulaire
+// complet des réglages. Route dédiée et minimale (un seul booléen) plutôt que
+// de réutiliser PUT /api/admin/settings avec un payload partiel, pour éviter
+// tout risque d'écraser d'autres champs par erreur depuis ce bouton rapide.
+app.post('/api/admin/bot-pause', requireAdminToken, async (req, res) => {
+  try {
+    const paused = req.body.paused === true;
+    const updated = await updateSettings({ bot_globally_paused: paused });
+    res.json({ bot_globally_paused: updated.bot_globally_paused });
+  } catch (err) {
+    console.error('Erreur pause globale du bot:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: génération IA d'une suggestion de script de vente ----------
+// MISE À JOUR 30/08/2026 — bouton "Générer une suggestion" dans Persona & Script.
+// Appel ponctuel (pas d'agent, pas d'outils) qui propose un jeu de textes cohérent
+// avec la persona et le catalogue actuels. Ne sauvegarde jamais automatiquement :
+// le front pré-remplit les champs et Bryan doit cliquer "Enregistrer" lui-même.
+app.post('/api/admin/generate-script-suggestion', requireAdminToken, async (req, res) => {
+  try {
+    const settings = await getSettings();
+    const catalog = await getActiveCatalog();
+    const suggestion = await generateScriptSuggestion({ settings, catalog });
+    res.json(suggestion);
+  } catch (err) {
+    console.error('Erreur génération suggestion de script:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -943,6 +1012,18 @@ app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, as
   }
 });
 
+// ---------- API Admin: fans par pays (carte interactive Vue d'ensemble) ----------
+// MISE À JOUR 30/08/2026 — alimente la carte demandée par Bryan. Renvoie un
+// simple objet { "Colombia": 12, "México": 5, ... } : le pays est celui que
+// l'IA a enregistré via remember_about_fan quand le fan l'a mentionné.
+app.get('/api/admin/analytics/geo', requireAdminToken, async (req, res) => {
+  try {
+    res.json(await getFanCountByCountry());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------- API Admin: simulateur de conversation (sans Telegram) ----------
 // MISE À JOUR 30/08/2026 — "aperçu vivant" (dashboard, Persona & Script) :
 // le simulateur accepte maintenant un `settingsOverride` optionnel, fusionné
@@ -1171,6 +1252,7 @@ app.get('/api/admin/live-stats', requireAdminToken, async (req, res) => {
       stalledCount: stalled.length,
       queueSize: fanQueues.size,
       uptimeSeconds: Math.floor(process.uptime()),
+      botGloballyPaused: !!settings.bot_globally_paused,
       aiCredit: {
         balance,
         balanceUpdatedAt: settings.ai_credit_balance_updated_at || null,

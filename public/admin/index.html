@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Meeli — Admin</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2040%2040%22%3E%0A%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%224%22%20y1%3D%222%22%20x2%3D%2236%22%20y2%3D%2238%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f4b740%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23ff8a5c%22/%3E%3C/linearGradient%3E%3C/defs%3E%0A%3Cpath%20d%3D%22M20%201.2%2036.5%2010.6v18.8L20%2038.8%203.5%2029.4V10.6Z%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3Cg%20fill%3D%22%23241a05%22%3E%0A%3Cellipse%20cx%3D%2212.8%22%20cy%3D%2217.4%22%20rx%3D%226.3%22%20ry%3D%224%22%20transform%3D%22rotate%28-26%2012.8%2017.4%29%22%20opacity%3D%22.82%22/%3E%0A%3Cellipse%20cx%3D%2227.2%22%20cy%3D%2217.4%22%20rx%3D%226.3%22%20ry%3D%224%22%20transform%3D%22rotate%2826%2027.2%2017.4%29%22%20opacity%3D%22.82%22/%3E%0A%3Ccircle%20cx%3D%2220%22%20cy%3D%2217%22%20r%3D%222.7%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2218.6%22%20width%3D%2211.4%22%20height%3D%2212.6%22%20rx%3D%225.5%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2221.9%22%20width%3D%2211.4%22%20height%3D%222.5%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2226.1%22%20width%3D%2211.4%22%20height%3D%222.5%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3C/g%3E%3C/svg%3E" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
@@ -56,8 +57,14 @@
   nav{width:232px;flex:0 0 232px;background:var(--bg-soft);border-right:1px solid var(--border-soft);
       padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
   .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 22px;margin-bottom:6px;border-bottom:1px solid var(--border-soft)}
-  .brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent-2));
-      display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 38px;box-shadow:0 4px 14px rgba(244,183,64,.28)}
+  /* MISE À JOUR 30/08/2026 — ancien logo : emoji 🐝 brut dans un carré arrondi,
+     jugé "moche" (retour répété de Bryan). Remplacé par un monogramme SVG
+     abeille dessiné à la main (hexagone façon alvéole + silhouette géométrique) :
+     rendu identique partout (contrairement à un emoji, qui varie par OS/police)
+     et cohérent avec le reste du langage visuel doré du dashboard. */
+  .brand-mark{width:38px;height:38px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;
+      filter:drop-shadow(0 4px 12px rgba(244,183,64,.3))}
+  .brand-mark svg{width:100%;height:100%;display:block}
   .brand-text{line-height:1.15}
   .brand-text .name{font-weight:800;font-size:1.02rem;letter-spacing:.01em}
   .brand-text .tag{font-size:.62rem;color:var(--muted-2);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
@@ -79,6 +86,7 @@
   .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted-2);flex:0 0 7px}
   .status-dot.up{background:var(--green);box-shadow:0 0 0 3px rgba(52,211,153,.18)}
   .status-dot.down{background:var(--red);box-shadow:0 0 0 3px rgba(248,113,113,.18)}
+  .status-dot.paused{background:var(--accent);box-shadow:0 0 0 3px rgba(244,183,64,.22)}
   #adminIdentity{font-size:.68rem;color:var(--muted-2)}
 
   main{flex:1;padding:28px 34px 60px;max-width:1180px}
@@ -115,6 +123,8 @@
   .live-dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;background:var(--green);opacity:.35;
       animation:live-pulse 1.8s ease-out infinite}
   @keyframes live-pulse{0%{transform:scale(.6);opacity:.5}100%{transform:scale(2.2);opacity:0}}
+  .live-dot.paused{background:var(--accent)}
+  .live-dot.paused::after{background:var(--accent);animation:none;opacity:0}
   .live-ops-updated{font-size:.72rem;color:var(--muted-2)}
   .live-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
   .live-cell{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:var(--radius-sm);
@@ -130,6 +140,18 @@
   .credit-bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--accent));transition:width .3s ease}
   .credit-bar-fill.low{background:linear-gradient(90deg,var(--accent-2),var(--red))}
   .credit-note{font-size:.72rem;color:var(--muted-2);margin-top:8px;line-height:1.4}
+
+  /* ---------- comparaison revenu potentiel vs confirmé (Vue d'ensemble) ---------- */
+  .revcompare-row{display:grid;grid-template-columns:110px 1fr 90px;align-items:center;gap:12px;margin-bottom:10px}
+  .revcompare-label{font-size:.78rem;color:var(--muted);font-weight:600}
+  .revcompare-track{height:14px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border-soft);overflow:hidden}
+  .revcompare-fill{height:100%;border-radius:8px;transition:width .4s ease}
+  .revcompare-fill.potential{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+  .revcompare-fill.confirmed{background:linear-gradient(90deg,var(--green),var(--teal))}
+  .revcompare-value{font-weight:800;font-size:.88rem;text-align:right}
+
+  /* ---------- pause globale du bot (Vue d'ensemble) ---------- */
+  #botPauseBtn.paused{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.35);color:var(--green)}
 
   label{display:block;font-size:.76rem;font-weight:600;color:var(--muted);margin:12px 0 5px;letter-spacing:.01em}
   input,textarea,select{width:100%;padding:9px 11px;background:var(--bg-soft);border:1px solid var(--border);
@@ -195,24 +217,38 @@
   .catalog-card .desc{color:var(--muted);font-size:.82rem;min-height:32px}
   .catalog-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 
-  /* ---------- coffre de contenu ---------- */
-  .vault-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
-  .vault-card{background:var(--surface-2);border:2px dashed var(--border);border-radius:var(--radius);padding:16px;
-      display:flex;flex-direction:column;gap:8px;transition:border-color .15s,background .15s}
-  .vault-card:hover{border-color:var(--accent);background:var(--surface-hover)}
-  .vault-card .vault-icon{font-size:1.6rem;line-height:1}
-  .vault-card .vault-title{font-weight:700;font-size:.9rem}
-  .vault-card .vault-count{font-size:.72rem;color:var(--muted)}
-  .vault-card input[type="file"]{font-size:.72rem;padding:6px;background:var(--bg-soft)}
-  .vault-card select{font-size:.78rem;padding:6px 8px}
-  .vault-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+  /* ---------- coffre de contenu ----------
+     MISE À JOUR 30/08/2026 — refonte visuelle (retour répété de Bryan : "c'est
+     moche"). Cartes pleines élevées au survol + badge icône en dégradé (même
+     langage que .psec-icon / l'assistant magique) au lieu du bloc en pointillés
+     plat + emoji nu d'avant, et un vrai bouton de dépôt au lieu de l'input
+     "Choisir les fichiers" natif brut. */
+  .vault-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  .vault-card{background:linear-gradient(180deg,var(--surface-hover),var(--surface));border:1px solid var(--border);
+      border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:10px;
+      transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}
+  .vault-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.3);border-color:rgba(244,183,64,.35)}
+  .vault-card .vault-icon{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#f4d35e);
+      display:flex;align-items:center;justify-content:center;font-size:1.3rem;box-shadow:0 4px 12px rgba(244,183,64,.28)}
+  .vault-card .vault-title{font-weight:800;font-size:.94rem;margin-top:2px}
+  .vault-card .vault-count{font-size:.72rem;color:var(--muted);margin-top:-6px}
+  .vault-card select{font-size:.78rem;padding:7px 9px}
+  .vault-card .vault-file-row{display:flex;align-items:center;gap:8px}
+  .vault-card input[type="file"]{font-size:.72rem;color:var(--muted);flex:1;min-width:0}
+  .vault-card input[type="file"]::file-selector-button{cursor:pointer;border:none;border-radius:7px;padding:6px 10px;
+      font-weight:700;font-size:.7rem;background:var(--surface-hover);color:var(--text);margin-right:8px;transition:.15s}
+  .vault-card input[type="file"]::file-selector-button:hover{background:var(--accent-soft);color:var(--accent)}
+  .vault-card .btn{width:100%;justify-content:center}
+  .vault-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
   .vault-thumb{position:relative;border-radius:var(--radius-sm);overflow:hidden;background:var(--surface-2);
-      border:1px solid var(--border);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+      border:1px solid var(--border);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+      box-shadow:0 4px 14px rgba(0,0,0,.2);transition:transform .15s ease,box-shadow .15s ease}
+  .vault-thumb:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.32)}
   .vault-thumb img{width:100%;height:100%;object-fit:cover}
   .vault-thumb .vault-video-badge{font-size:1.6rem}
-  .vault-thumb .vault-cat-label{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;
-      font-size:.62rem;padding:3px 5px;text-align:center}
-  .vault-thumb .vault-del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;
+  .vault-thumb .vault-cat-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(0deg,rgba(0,0,0,.72),transparent);
+      color:#fff;font-size:.64rem;font-weight:600;padding:10px 6px 5px;text-align:center}
+  .vault-thumb .vault-del{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.55);color:#fff;border:none;
       border-radius:6px;width:20px;height:20px;font-size:.72rem;cursor:pointer;line-height:1}
 
   .prompt-preview{margin-top:10px;background:var(--bg-soft);border:1px solid var(--border);border-radius:var(--radius-sm);
@@ -227,32 +263,58 @@
   .gate-card p{color:var(--muted);font-size:.82rem;margin:0 0 18px}
 
   /* ---------- live / conversations ---------- */
-  .live-layout{display:grid;grid-template-columns:290px 1fr;gap:16px}
-  .fan-filters{display:flex;gap:8px;margin-bottom:8px}
+  /* MISE À JOUR 30/08/2026 — mise en page "En direct" retravaillée (retour Bryan :
+     "ameliore la mise en page") : cartes surélevées avec ombre (même langage que
+     .stat-card/.panel), items de la liste plus respirés avec léger déplacement au
+     survol, en-tête de fil reconstruit autour d'un grand avatar + stats clés, et
+     bloc "Notes prise par l'IA" transformé en petites cartes iconographiées au lieu
+     de lignes de texte brut (voir .ai-note-card plus bas). */
+  .live-layout{display:grid;grid-template-columns:300px 1fr;gap:18px}
+  .fan-filters{display:flex;gap:8px;margin-bottom:10px}
   .fan-filters select{width:auto;flex:0 0 auto}
-  .fan-list{max-height:calc(100vh - 250px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
-  .fan-item{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;cursor:pointer;transition:background .15s ease}
+  .fan-list{max-height:calc(100vh - 250px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);
+      background:var(--surface);box-shadow:var(--shadow)}
+  .fan-item{display:flex;gap:10px;padding:13px 15px;border-bottom:1px solid var(--border-soft);border-left:3px solid transparent;
+      cursor:pointer;transition:background .15s ease,transform .15s ease}
   .fan-item.potential-hot{border-left-color:var(--green)}
   .fan-item.potential-cold{border-left-color:var(--blue)}
-  .fan-item:hover{background:var(--surface-2)}
+  .fan-item:hover{background:var(--surface-2);transform:translateX(2px)}
   .fan-item.active{background:var(--accent-soft)}
-  .avatar{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:flex;align-items:center;justify-content:center;
+  .avatar{width:36px;height:36px;border-radius:50%;flex:0 0 36px;display:flex;align-items:center;justify-content:center;
       font-size:.78rem;font-weight:800;color:#181000;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
   .fan-item .meta{min-width:0;flex:1}
   .fan-item .name-row{display:flex;align-items:center;gap:6px;justify-content:space-between}
   .fan-item .name{font-weight:700;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .fan-item .preview{font-size:.76rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 
-  .thread-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
-  .thread-header{padding:14px 18px;border-bottom:1px solid var(--border-soft);display:flex;flex-direction:column;gap:10px}
-  .profile-panel{display:flex;flex-direction:column;gap:5px}
-  .profile-row{font-size:.78rem;color:var(--muted);line-height:1.4}
-  .profile-row.danger{color:var(--red)}
-  .profile-label{font-weight:700;color:var(--text);margin-right:6px}
-  .profile-row.danger .profile-label{color:var(--red)}
+  .thread-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);display:flex;
+      flex-direction:column;overflow:hidden;box-shadow:var(--shadow)}
+  .thread-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+      color:var(--muted);min-height:340px;padding:30px;text-align:center}
+  .thread-empty .psec-icon{width:52px;height:52px;font-size:1.6rem;border-radius:16px}
+  .thread-header{padding:16px 18px;border-bottom:1px solid var(--border-soft);display:flex;flex-direction:column;gap:12px;
+      background:linear-gradient(180deg,var(--surface-hover),var(--surface))}
+  .thread-header-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .thread-header-id{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+  .thread-header-id .avatar{width:42px;height:42px;flex:0 0 42px;font-size:.88rem;box-shadow:0 0 0 2px var(--surface)}
+  .thread-header-name{font-weight:800;font-size:.98rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .thread-header-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px}
+  .thread-spent{font-size:.72rem;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);
+      padding:2px 8px;border-radius:999px}
+  .ai-notes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+  .ai-note-card{display:flex;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;
+      padding:9px 11px;font-size:.76rem;line-height:1.4;color:var(--muted)}
+  .ai-note-card .ico{flex:0 0 auto;font-size:.9rem;margin-top:1px}
+  .ai-note-card .lbl{display:block;font-weight:700;color:var(--text);font-size:.72rem;margin-bottom:1px}
+  .ai-note-card.danger{background:var(--red-soft);border-color:rgba(248,113,113,.3);color:var(--red)}
+  .ai-note-card.danger .lbl{color:var(--red)}
+  .ai-note-empty{font-size:.76rem;color:var(--muted);font-style:italic}
+  .admin-note-row{display:flex;gap:6px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--border);
+      border-radius:11px;padding:8px 10px}
+  .admin-note-row textarea{border:none;background:transparent;padding:0;min-height:32px;font-size:.8rem}
   .thread{padding:16px 18px;max-height:calc(100vh - 270px);overflow-y:auto;display:flex;flex-direction:column;gap:9px}
   .composer{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border-soft);background:var(--surface-2)}
-  .composer input{flex:1}
+  .composer input{flex:1;border-radius:999px}
   .safety-item{padding:9px 0;border-bottom:1px solid var(--border-soft)}
   .safety-item:last-child{border-bottom:none}
   .msg.warn-msg{background:var(--red-soft);color:var(--red);border:1px solid rgba(248,113,113,.3);align-self:stretch;max-width:100%;font-size:.78rem}
@@ -473,7 +535,7 @@
      Même langage visuel que l'assistant magique (dégradé doré, cartes
      surélevées) pour que tout l'onglet se sente cohérent. */
   .psec-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;
-      background:var(--accent-soft);font-size:1.05rem;flex:0 0 34px}
+      background:var(--accent-soft);font-size:1.05rem;flex:0 0 34px;font-weight:800;color:var(--accent)}
   .panel h3.with-icon{gap:11px}
 
   .choice-group{display:flex;flex-direction:column;gap:9px;margin:10px 0 4px}
@@ -546,13 +608,43 @@
     main{padding:20px}
     .live-layout{grid-template-columns:1fr}
   }
+
+  /* ---------- carte "Fans par pays" (Vue d'ensemble) ---------- */
+  /* MISE À JOUR 30/08/2026 — carte interactive demandée par Bryan, alimentée par
+     le pays que l'IA enregistre quand un fan le mentionne (voir remember_about_fan
+     dans claudeAgent.js). Bibliothèque Leaflet (CDN) + fond de carte CartoDB dark,
+     choisi pour rester cohérent avec le thème sombre du dashboard. */
+  .geo-map-canvas{width:100%;height:320px;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+  .geo-map-canvas .leaflet-popup-content-wrapper{background:var(--surface-2);color:var(--text);border-radius:10px}
+  .geo-map-canvas .leaflet-popup-tip{background:var(--surface-2)}
+  .geo-map-fallback{margin-top:10px;color:var(--muted);font-size:.78rem}
+  .geo-country-pill{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);
+      border-radius:999px;padding:3px 10px;margin:3px 5px 0 0;font-size:.74rem}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
 <div id="gate" class="gate-wrap">
   <div class="gate-card">
-    <div class="brand-mark">🐝</div>
+    <div class="brand-mark"><svg viewBox="0 0 40 40" role="img" aria-label="Meeli">
+        <defs>
+          <linearGradient id="meeliLogoGrad" x1="4" y1="2" x2="36" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0" style="stop-color:var(--accent)"/>
+            <stop offset="1" style="stop-color:var(--accent-2)"/>
+          </linearGradient>
+        </defs>
+        <path d="M20 1.2 36.5 10.6v18.8L20 38.8 3.5 29.4V10.6Z" fill="url(#meeliLogoGrad)"/>
+        <g fill="#241a05">
+          <ellipse cx="12.8" cy="17.4" rx="6.3" ry="4" transform="rotate(-26 12.8 17.4)" opacity=".82"/>
+          <ellipse cx="27.2" cy="17.4" rx="6.3" ry="4" transform="rotate(26 27.2 17.4)" opacity=".82"/>
+          <circle cx="20" cy="17" r="2.7"/>
+          <rect x="14.3" y="18.6" width="11.4" height="12.6" rx="5.5"/>
+          <rect x="14.3" y="21.9" width="11.4" height="2.5" fill="url(#meeliLogoGrad)"/>
+          <rect x="14.3" y="26.1" width="11.4" height="2.5" fill="url(#meeliLogoGrad)"/>
+        </g>
+      </svg></div>
     <h1>Meeli — Admin</h1>
     <p>Colle ton token admin pour accéder au tableau de bord.</p>
     <input id="tokenInput" placeholder="Token admin" />
@@ -564,7 +656,23 @@
 <div id="app" style="display:none" class="layout">
   <nav>
     <div class="brand">
-      <div class="brand-mark">🐝</div>
+      <div class="brand-mark"><svg viewBox="0 0 40 40" role="img" aria-label="Meeli">
+        <defs>
+          <linearGradient id="meeliLogoGrad" x1="4" y1="2" x2="36" y2="38" gradientUnits="userSpaceOnUse">
+            <stop offset="0" style="stop-color:var(--accent)"/>
+            <stop offset="1" style="stop-color:var(--accent-2)"/>
+          </linearGradient>
+        </defs>
+        <path d="M20 1.2 36.5 10.6v18.8L20 38.8 3.5 29.4V10.6Z" fill="url(#meeliLogoGrad)"/>
+        <g fill="#241a05">
+          <ellipse cx="12.8" cy="17.4" rx="6.3" ry="4" transform="rotate(-26 12.8 17.4)" opacity=".82"/>
+          <ellipse cx="27.2" cy="17.4" rx="6.3" ry="4" transform="rotate(26 27.2 17.4)" opacity=".82"/>
+          <circle cx="20" cy="17" r="2.7"/>
+          <rect x="14.3" y="18.6" width="11.4" height="12.6" rx="5.5"/>
+          <rect x="14.3" y="21.9" width="11.4" height="2.5" fill="url(#meeliLogoGrad)"/>
+          <rect x="14.3" y="26.1" width="11.4" height="2.5" fill="url(#meeliLogoGrad)"/>
+        </g>
+      </svg></div>
       <div class="brand-text"><div class="name">Meeli</div><div class="tag">Admin</div></div>
     </div>
     <div class="nav-section-label">Pilotage</div>
@@ -625,14 +733,23 @@
 
       <div class="panel live-ops">
         <div class="live-ops-head">
-          <div class="live-ops-title"><span class="live-dot"></span> Live Ops — temps réel</div>
-          <div class="live-ops-updated" id="liveOpsUpdated"></div>
+          <div class="live-ops-title"><span class="live-dot" id="liveOpsDot"></span> <span id="liveOpsTitleText">Live Ops — temps réel</span></div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="live-ops-updated" id="liveOpsUpdated"></div>
+            <button class="btn btn-ghost btn-sm" id="botPauseBtn" onclick="toggleBotGlobalPause()">⏸ Mettre le bot en pause</button>
+          </div>
         </div>
         <div class="live-grid" id="liveOpsGrid"></div>
         <div class="credit-block" id="creditBlock"></div>
       </div>
 
       <div class="stat-grid stagger" id="stats"></div>
+
+      <div class="panel">
+        <h3>Revenu potentiel vs confirmé</h3>
+        <p class="panel-sub">"Liens envoyés" = ce que ça vaudrait si tout était payé. "Confirmé" = ce que toi ou Meely avez vérifié comme réellement reçu (Ventes → "Confirmer payé").</p>
+        <div id="revenueCompare"></div>
+      </div>
 
       <div class="panel">
         <h3>Revenu &amp; croissance (30 derniers jours)</h3>
@@ -643,13 +760,17 @@
       </div>
 
       <div class="panel">
-        <h3>Performance par campagne</h3>
-        <table id="campaignTable"><thead><tr><th>Campagne</th><th>Clics</th><th>Fans</th><th>Revenu</th></tr></thead><tbody></tbody></table>
+        <h3>🌍 Fans par pays</h3>
+        <p class="panel-sub">Se remplit progressivement : l'IA note le pays quand un fan le mentionne dans la conversation. Aucune donnée historique avant aujourd'hui — les pins apparaissent au fil des nouvelles conversations.</p>
+        <div id="geoMapWrap">
+          <div class="geo-map-canvas" id="geoMapCanvas"></div>
+          <div class="geo-map-fallback" id="geoMapFallback"></div>
+        </div>
       </div>
 
       <div class="panel">
-        <h3>Test A/B (message d'accueil)</h3>
-        <table id="variantTable"><thead><tr><th>Variante</th><th>Fans</th><th>Revenu</th></tr></thead><tbody></tbody></table>
+        <h3>Performance par campagne</h3>
+        <table id="campaignTable"><thead><tr><th>Campagne</th><th>Clics</th><th>Fans</th><th>Revenu</th></tr></thead><tbody></tbody></table>
       </div>
 
       <div class="panel">
@@ -705,8 +826,13 @@
           <div class="fan-list" id="fanList"></div>
         </div>
         <div class="thread-card">
-          <div class="thread-header muted" id="fanHeader">Sélectionne un fan à gauche</div>
-          <div class="thread" id="thread"></div>
+          <div class="thread-header" id="fanHeader" style="display:none"></div>
+          <div class="thread" id="thread">
+            <div class="thread-empty">
+              <span class="psec-icon">💬</span>
+              <div><strong style="color:var(--text)">Sélectionne un fan à gauche</strong><br/>Son fil de conversation et ses notes IA s'afficheront ici.</div>
+            </div>
+          </div>
           <div class="composer" id="composerWrap" style="display:none">
             <input id="composerInput" placeholder="Écris toi-même à ce fan pendant que l'IA est en pause..." onkeydown="if(event.key==='Enter')sendManualMessage()" />
             <label style="flex:0 0 auto;display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--muted);white-space:nowrap">
@@ -899,7 +1025,17 @@
 
       <div class="persona-section" data-psec-panel="script" style="display:none">
       <div class="panel">
-        <h3>Messages &amp; script — 1. Accroche</h3>
+        <h3 class="with-icon"><span class="psec-icon">✨</span> Génération automatique</h3>
+        <div class="persona-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none"/></svg>
+          <div>L'IA propose un jeu complet de messages et d'instructions cohérent avec la persona (onglet Identité) et le catalogue actuel. Elle ne fait que <strong style="color:var(--text)">pré-remplir</strong> les 6 champs ci-dessous — rien n'est envoyé à un vrai fan ni sauvegardé tant que tu n'as pas cliqué sur "💾 Enregistrer" en haut de la page.</div>
+        </div>
+        <button class="btn btn-primary" id="genScriptBtn" onclick="generateScriptSuggestionClick()">✨ Générer une suggestion</button>
+        <span id="genScriptStatus" class="muted" style="margin-left:10px;font-size:.78rem"></span>
+      </div>
+
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">1</span> Accroche</h3>
         <label>Message d'accueil — variante A (variables: {persona_name}, {creator_name})</label>
         <textarea id="intro_message"></textarea>
         <label>Message d'accueil — variante B (optionnel, pour test A/B)</label>
@@ -907,17 +1043,32 @@
       </div>
 
       <div class="panel">
-        <h3>Script par étapes de vente</h3>
-        <p class="muted" style="margin-top:-6px">Chaque étape est optionnelle — laisse vide celles que tu ne veux pas scripter, l'IA improvisera avec le ton général.</p>
-        <label>2. Qualification (comprendre ce que cherche le fan avant de vendre)</label>
+        <h3 class="with-icon"><span class="psec-icon">2</span> Qualification</h3>
+        <p class="muted" style="margin-top:-6px">Comment l'IA doit comprendre ce que cherche le fan avant de vendre (instruction pour l'IA, pas un message figé).</p>
         <textarea id="script_qualification"></textarea>
-        <label>3. Montée en désir / tease (sans contenu gratuit ni description explicite)</label>
+      </div>
+
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">3</span> Montée en désir (tease)</h3>
+        <p class="muted" style="margin-top:-6px">Comment créer l'envie avant de proposer un article, sans jamais donner de contenu gratuit ni de description explicite.</p>
         <textarea id="script_tease"></textarea>
-        <label>4. Objections (déjà existant — guide l'IA face aux hésitations)</label>
+      </div>
+
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">4</span> Objections</h3>
+        <p class="muted" style="margin-top:-6px">Comment répondre aux hésitations les plus courantes : prix, méfiance, "tu es un bot"...</p>
         <textarea id="playbook" style="min-height:100px"></textarea>
-        <label>5. Closing (quand le fan est d'accord sur article + prix)</label>
+      </div>
+
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">5</span> Closing</h3>
+        <p class="muted" style="margin-top:-6px">Comment conclure la vente une fois que le fan est d'accord sur un article et un prix.</p>
         <textarea id="script_closing"></textarea>
-        <label>6. Upsell (plus tard dans la conversation, jamais juste après une vente)</label>
+      </div>
+
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">6</span> Upsell</h3>
+        <p class="muted" style="margin-top:-6px">Comment proposer le prochain article plus tard dans la conversation — jamais juste après une vente.</p>
         <textarea id="script_upsell"></textarea>
       </div>
       </div>
@@ -943,10 +1094,21 @@
 
       <div class="persona-section" data-psec-panel="prix" style="display:none">
       <div class="panel">
-        <h3>Prix &amp; négociation</h3>
+        <h3 class="with-icon"><span class="psec-icon">💬</span> Négociation</h3>
+        <div class="persona-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none"/></svg>
+          <div>Oui, le bot négocie vraiment — mais SEULEMENT sur les articles marqués <strong style="color:var(--text)">"négociable"</strong> dans le Catalogue. Sur ceux-là, il peut descendre jusqu'au prix minimum ci-dessous, sans jamais dépasser la remise max. Les deux réglages ne servent à rien tant qu'aucun article n'est marqué négociable.</div>
+        </div>
         <div class="row">
-          <div><label>Prix minimum négocié</label><input id="min_custom_price" type="number" step="0.01" /></div>
-          <div><label>Remise max négociation (%)</label><input id="max_negotiation_discount_pct" type="number" step="1" /></div>
+          <div><label>Prix minimum négocié (plancher, tous articles négociables confondus)</label><input id="min_custom_price" type="number" step="0.01" /></div>
+          <div><label>Remise max négociation (% du prix affiché)</label><input id="max_negotiation_discount_pct" type="number" step="1" /></div>
+        </div>
+        <label style="margin-top:16px">Articles actuellement négociables</label>
+        <div id="negotiableItemsList" class="muted" style="font-size:.82rem">Chargement...</div>
+      </div>
+      <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">⚙️</span> Divers</h3>
+        <div class="row">
           <div><label>Username du bot Telegram (sans @)</label><input id="telegram_bot_username" /></div>
           <div><label>Symbole monétaire (ex: $, €)</label><input id="currency_symbol" /></div>
         </div>
@@ -1147,18 +1309,71 @@ function showConfirm(message, confirmLabel){
   });
 }
 
-// ---- Statut du bot (point vert/rouge en bas de la nav) + identité de l'admin connecté ----
+// ---- Statut du bot (point vert/orange/rouge en bas de la nav) + identité de l'admin connecté ----
+// MISE À JOUR 30/08/2026 — le point ne distinguait avant que "joignable" /
+// "injoignable" (ping de /health, public, sans auth). Il combine maintenant
+// ça avec l'état de pause globale (voir loadLiveOps, qui met à jour
+// `botGloballyPaused` à chaque rafraîchissement) pour distinguer 3 états
+// réels : en ligne et actif, en ligne mais en pause, ou injoignable.
 let botStatusTimer = null;
-async function checkBotStatus(){
+let botGloballyPaused = false;
+let botReachable = null;
+
+function renderBotStatusDot(){
   const dot = document.getElementById('botStatusDot');
   const label = document.getElementById('botStatusLabel');
   if (!dot) return;
+  if (botReachable === false) { dot.className = 'status-dot down'; label.textContent = 'Bot injoignable'; return; }
+  if (botGloballyPaused) { dot.className = 'status-dot paused'; label.textContent = 'Bot en pause'; return; }
+  dot.className = 'status-dot up'; label.textContent = 'Bot en ligne';
+}
+
+async function checkBotStatus(){
+  const dot = document.getElementById('botStatusDot');
+  if (!dot) return;
   try {
     const res = await fetch('/health');
-    if (res.ok) { dot.className = 'status-dot up'; label.textContent = 'Bot en ligne'; }
-    else throw new Error('down');
+    botReachable = res.ok;
   } catch(e) {
-    dot.className = 'status-dot down'; label.textContent = 'Bot injoignable';
+    botReachable = false;
+  }
+  renderBotStatusDot();
+}
+
+// ---------- Pause/reprise globale du bot (Vue d'ensemble) ----------
+// MISE À JOUR 30/08/2026 — demandé par Bryan : un vrai bouton pour couper
+// toute réponse automatique sans devoir mettre chaque fan en pause un par un.
+// Un arrêt complet du service Render couperait aussi ce dashboard (qui sert
+// justement à relancer le bot), donc ce bouton fait l'équivalent sûr : le
+// serveur reste en ligne et journalise tout, mais ne répond plus à personne
+// tant que ce n'est pas réactivé ici.
+function updateBotPauseButton(){
+  const btn = document.getElementById('botPauseBtn');
+  if (!btn) return;
+  btn.classList.toggle('paused', botGloballyPaused);
+  btn.textContent = botGloballyPaused ? '▶️ Réactiver le bot' : '⏸ Mettre le bot en pause';
+}
+
+async function toggleBotGlobalPause(){
+  const next = !botGloballyPaused;
+  if (next) {
+    const ok = await showConfirm('Mettre le bot en pause va couper toute réponse automatique, pour TOUS les fans, jusqu\'à ce que tu le réactives ici. Les messages reçus restent bien enregistrés. Continuer ?', 'Mettre en pause');
+    if (!ok) return;
+  }
+  const btn = document.getElementById('botPauseBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api('/api/admin/bot-pause', { method: 'POST', body: JSON.stringify({ paused: next }) });
+    if (res && res.error) throw new Error(res.error);
+    botGloballyPaused = !!res.bot_globally_paused;
+    renderBotStatusDot();
+    updateBotPauseButton();
+    showToast(botGloballyPaused ? 'Bot mis en pause — plus aucune réponse automatique ⏸' : 'Bot réactivé ✅');
+    loadLiveOps();
+  } catch (err) {
+    showToast('Erreur: ' + err.message, true);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1227,6 +1442,21 @@ function showPersonaSection(name){
   // données à la demande (pas au boot général) : l'historique n'a pas besoin
   // d'être rafraîchi tant qu'on ne va pas le consulter.
   if (name === 'historique') loadSettingsHistory();
+  if (name === 'prix') renderNegotiableItemsList();
+}
+
+// Liste en direct des articles marqués "négociable" dans le Catalogue — sert
+// à rendre concret ce que font min_custom_price/max_negotiation_discount_pct
+// juste au-dessus (Bryan ne voyait pas à quoi servait cet onglet).
+function renderNegotiableItemsList(){
+  const el = document.getElementById('negotiableItemsList');
+  if (!el) return;
+  const negotiable = (catalogCache || []).filter(it => it.is_negotiable);
+  if (!negotiable.length) {
+    el.innerHTML = 'Aucun article marqué négociable pour l\'instant — va dans <strong style="color:var(--text)">Catalogue</strong> pour cocher "négociable" sur un article.';
+    return;
+  }
+  el.innerHTML = negotiable.map(it => `<span class="pill" style="margin:0 6px 6px 0">${escapeHtml(it.name)} — ${currencySymbol}${it.price}</span>`).join('');
 }
 
 // ---------- Persona & Script : sélecteurs "pill" (remplacent les <select>
@@ -1313,6 +1543,17 @@ async function loadLiveOps(){
   let s;
   try { s = await api('/api/admin/live-stats'); } catch(e) { return; }
   document.getElementById('liveOpsUpdated').textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR');
+
+  botGloballyPaused = !!s.botGloballyPaused;
+  botReachable = true; // cette requête admin a réussi, donc le serveur répond
+  renderBotStatusDot();
+  updateBotPauseButton();
+  const liveOpsDot = document.getElementById('liveOpsDot');
+  const liveOpsTitleText = document.getElementById('liveOpsTitleText');
+  if (liveOpsDot && liveOpsTitleText) {
+    liveOpsDot.className = 'live-dot' + (botGloballyPaused ? ' paused' : '');
+    liveOpsTitleText.textContent = botGloballyPaused ? 'Live Ops — bot en pause globale' : 'Live Ops — temps réel';
+  }
 
   const cells = [
     { key:'active1h', lv: s.active1h, ll: 'Chats actifs (1h)' },
@@ -1452,10 +1693,114 @@ async function loadStats(){
     <tr><td>${escapeHtml(c.campaign_label||'(sans nom)')}</td><td>${c.clicks}</td><td>${c.fans}</td><td>${fmtMoney(c.revenue)}</td></tr>
   `).join('') || "<tr><td colspan=\"4\" class=\"muted\">Aucune campagne pour l'instant</td></tr>";
 
-  document.querySelector('#variantTable tbody').innerHTML = ['A','B'].map(v => {
-    const d = s.byVariant?.[v] || {fans:0, revenue:0};
-    return `<tr><td>Variante ${v}</td><td>${d.fans}</td><td>${fmtMoney(d.revenue)}</td></tr>`;
-  }).join('');
+  renderRevenueCompare(Number(s.revenue) || 0, Number(s.paidRevenue) || 0);
+  loadGeoMap();
+}
+
+// ---------- Carte "Fans par pays" ----------
+// MISE À JOUR 30/08/2026 — demandé par Bryan : carte du monde interactive avec
+// des pins selon le pays que l'IA a retenu pour chaque fan (voir remember_about_fan
+// côté claudeAgent.js). Table de centroïdes couvrant les marchés hispanophones/
+// lusophones/anglophones les plus courants pour ce type de bot — un pays reçu
+// mais absent de la table n'est pas perdu, il apparaît en liste texte sous la carte.
+const COUNTRY_CENTROIDS = {
+  colombia: [4.5709, -74.2973], mexico: [23.6345, -102.5528], espana: [40.4637, -3.7492],
+  argentina: [-38.4161, -63.6167], chile: [-35.6751, -71.5430], peru: [-9.19, -75.0152],
+  venezuela: [6.4238, -66.5897], ecuador: [-1.8312, -78.1834], 'estados unidos': [37.0902, -95.7129],
+  usa: [37.0902, -95.7129], panama: [8.5380, -80.7821], 'republica dominicana': [18.7357, -70.1627],
+  'puerto rico': [18.2208, -66.5901], bolivia: [-16.2902, -63.5887], paraguay: [-23.4425, -58.4438],
+  uruguay: [-32.5228, -55.7658], 'costa rica': [9.7489, -83.7534], guatemala: [15.7835, -90.2308],
+  honduras: [15.2000, -86.2419], 'el salvador': [13.7942, -88.8965], nicaragua: [12.8654, -85.2072],
+  cuba: [21.5218, -77.7812], brasil: [-14.2350, -51.9253], francia: [46.2276, 2.2137],
+  italia: [41.8719, 12.5674], canada: [56.1304, -106.3468], 'reino unido': [55.3781, -3.4360],
+  alemania: [51.1657, 10.4515], portugal: [39.3999, -8.2245], 'estados unidos de america': [37.0902, -95.7129],
+};
+function normalizeCountryName(raw){
+  return (raw || '').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // enleve les accents
+}
+let _geoMapInstance = null;
+async function loadGeoMap(){
+  try {
+    const counts = await api('/api/admin/analytics/geo');
+    renderGeoMap(counts || {});
+  } catch (err) {
+    const fb = document.getElementById('geoMapFallback');
+    if (fb) fb.textContent = 'Carte indisponible pour le moment (' + err.message + ')';
+  }
+}
+function renderGeoMap(counts){
+  const canvas = document.getElementById('geoMapCanvas');
+  const fallback = document.getElementById('geoMapFallback');
+  if (!canvas) return;
+  if (typeof L === 'undefined') {
+    // Bibliothèque de carte non chargée (CDN bloqué/hors-ligne) — on ne casse
+    // pas la page, on retombe sur une simple liste texte des pays connus.
+    canvas.style.display = 'none';
+    if (fallback) {
+      const entries = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+      fallback.innerHTML = entries.length
+        ? 'Carte indisponible hors-ligne — répartition : ' + entries.map(([c,n]) => `<span class="geo-country-pill">${escapeHtml(c)} · ${n}</span>`).join('')
+        : "Aucun pays enregistré pour l'instant.";
+    }
+    return;
+  }
+  try {
+    if (!_geoMapInstance) {
+      _geoMapInstance = L.map('geoMapCanvas', { worldCopyJump: true, minZoom: 1 }).setView([15, -60], 2);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap, © CARTO', maxZoom: 8,
+      }).addTo(_geoMapInstance);
+      _geoMapInstance._pinLayer = L.layerGroup().addTo(_geoMapInstance);
+    }
+    _geoMapInstance._pinLayer.clearLayers();
+    const unmatched = [];
+    const maxCount = Math.max(1, ...Object.values(counts));
+    Object.entries(counts).forEach(([country, count]) => {
+      const key = normalizeCountryName(country);
+      const centroid = COUNTRY_CENTROIDS[key];
+      if (!centroid) { unmatched.push([country, count]); return; }
+      const radius = 7 + 13 * Math.sqrt(count / maxCount);
+      L.circleMarker(centroid, {
+        radius, color: '#f4b740', weight: 1.5, fillColor: '#ff8a5c', fillOpacity: .55,
+      }).bindPopup(`<strong>${escapeHtml(country)}</strong><br/>${count} fan${count>1?'s':''}`).addTo(_geoMapInstance._pinLayer);
+    });
+    setTimeout(() => _geoMapInstance.invalidateSize(), 50);
+    if (fallback) {
+      fallback.innerHTML = unmatched.length
+        ? 'Pays mentionnés mais non localisés sur la carte : ' + unmatched.map(([c,n]) => `<span class="geo-country-pill">${escapeHtml(c)} · ${n}</span>`).join('')
+        : '';
+    }
+  } catch (err) {
+    if (fallback) fallback.textContent = 'Erreur affichage carte: ' + err.message;
+  }
+}
+
+// MISE À JOUR 30/08/2026 — remplace l'ancien tableau "Test A/B" (jugé sans
+// utilité claire par Bryan) par une comparaison visuelle directe entre ce que
+// valent les liens envoyés (potentiel) et ce qui est réellement confirmé payé
+// (voir Ventes → "Confirmer payé", seule source de vérité pour un vrai
+// paiement puisqu'il n'y a pas de webhook Dropp.fans).
+function renderRevenueCompare(potential, confirmed){
+  const el = document.getElementById('revenueCompare');
+  if (!el) return;
+  const max = Math.max(potential, confirmed, 1);
+  const potPct = Math.min(100, (potential / max) * 100);
+  const confPct = Math.min(100, (confirmed / max) * 100);
+  const rate = potential > 0 ? Math.round((confirmed / potential) * 100) : 0;
+  el.innerHTML = `
+    <div class="revcompare-row">
+      <div class="revcompare-label">Liens envoyés</div>
+      <div class="revcompare-track"><div class="revcompare-fill potential" style="width:${potPct}%"></div></div>
+      <div class="revcompare-value">${fmtMoney(potential)}</div>
+    </div>
+    <div class="revcompare-row">
+      <div class="revcompare-label">Confirmé payé</div>
+      <div class="revcompare-track"><div class="revcompare-fill confirmed" style="width:${confPct}%"></div></div>
+      <div class="revcompare-value">${fmtMoney(confirmed)}</div>
+    </div>
+    <p class="muted" style="margin:10px 0 0;font-size:.76rem">${rate}% des liens envoyés sont confirmés payés jusqu'ici.</p>
+  `;
 }
 
 // Champs texte/numériques classiques (inputs/textareas simples, un id = une
@@ -1578,6 +1923,45 @@ async function saveSettings(){
 // touche jamais aux vraies données. Déclenché uniquement au clic — jamais
 // automatiquement à chaque frappe — pour ne pas multiplier les appels Claude
 // facturés (voir l'incident de crédit épuisé du 29/08).
+// ---------- Persona & Script → Script de vente : génération IA d'une suggestion ----------
+// MISE À JOUR 30/08/2026 — bouton "Générer une suggestion" demandé par Bryan pour
+// dégrossir le remplissage du script de vente. Pré-remplit seulement (jamais
+// sauvegardé tout seul) — même philosophie que l'aperçu en direct : un clic = un
+// appel Claude, donc volontairement manuel, jamais automatique.
+const SCRIPT_SUGGESTION_FIELDS = ['intro_message','script_qualification','script_tease','playbook','script_closing','script_upsell'];
+async function generateScriptSuggestionClick(){
+  const btn = document.getElementById('genScriptBtn');
+  const status = document.getElementById('genScriptStatus');
+  const hasExisting = SCRIPT_SUGGESTION_FIELDS.some(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim();
+  });
+  if (hasExisting) {
+    const ok = await showConfirm('Certains champs du script contiennent déjà du texte — la suggestion va les remplacer (rien n\'est sauvegardé tant que tu ne cliques pas sur "Enregistrer"). Continuer ?', 'Générer quand même');
+    if (!ok) return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Génération...'; }
+  if (status) status.textContent = '';
+  try {
+    const suggestion = await api('/api/admin/generate-script-suggestion', { method:'POST', body: JSON.stringify({}) });
+    if (suggestion && suggestion.error) throw new Error(suggestion.error);
+    let filled = 0;
+    SCRIPT_SUGGESTION_FIELDS.forEach(id => {
+      if (typeof suggestion[id] === 'string' && suggestion[id]) {
+        const el = document.getElementById(id);
+        if (el) { el.value = suggestion[id]; filled++; }
+      }
+    });
+    if (status) status.textContent = `✅ ${filled} champ(s) pré-rempli(s) — pense à cliquer sur "Enregistrer" si ça te plaît.`;
+    showToast('Suggestion générée — relis-la avant d\'enregistrer.');
+  } catch (err) {
+    if (status) status.textContent = '';
+    showToast('Erreur génération: ' + err.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Générer une suggestion'; }
+  }
+}
+
 async function generateLivePreview(){
   const btn = document.getElementById('previewBtn');
   const screen = document.getElementById('previewScreen');
@@ -1759,8 +2143,10 @@ function renderVaultGrid(){
           <option value="">Lier à un article (optionnel)</option>
           ${catalogCache.map(it => `<option value="${it.id}">${it.name}</option>`).join('')}
         </select>
-        <input type="file" id="vault_files_${c.key}" multiple accept="image/*,video/*" />
-        <button class="btn btn-primary btn-sm" onclick="uploadVaultFiles('${c.key}')">Déposer ici</button>
+        <div class="vault-file-row">
+          <input type="file" id="vault_files_${c.key}" multiple accept="image/*,video/*" />
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="uploadVaultFiles('${c.key}')">📥 Déposer ici</button>
       </div>
     `;
   }).join('');
@@ -2123,6 +2509,7 @@ async function loadCatalog(){
     });
   } catch(e) { vaultThumbByItem = {}; }
   renderCatalog();
+  renderNegotiableItemsList();
 }
 
 function renderCatalog(){
@@ -2334,9 +2721,18 @@ function potentialBadge(potential){
   return '<span class="pill" style="background:rgba(139,147,167,.12);color:var(--muted)">— Pas encore évalué</span>';
 }
 
+// Bloc "Notes prise par l'IA" — MISE À JOUR 30/08/2026 : refonte demandée par
+// Bryan ("ameliore la partie note prise par l'IA"). Chaque note devient une
+// petite carte iconographiée (même langage visuel que .vault-card/.ai-note-card)
+// au lieu d'une ligne de texte brut à plat — plus lisible d'un coup d'œil,
+// notamment la carte "Alerte" qui ressort clairement en rouge.
 function profileBlock(label, value, danger){
   if (!value) return '';
-  return `<div class="profile-row${danger?' danger':''}"><span class="profile-label">${label}</span>${escapeHtml(value)}</div>`;
+  const parts = label.split(' ');
+  const icon = parts.shift();
+  const text = parts.join(' ');
+  return `<div class="ai-note-card${danger?' danger':''}"><span class="ico">${icon}</span>
+    <div><span class="lbl">${escapeHtml(text)}</span>${escapeHtml(value)}</div></div>`;
 }
 
 let lastFansData = [];
@@ -2394,26 +2790,38 @@ async function openFan(id){
 async function loadThread(id, silent){
   const data = await api('/api/admin/fans/'+id+'/messages');
   const f = data.fan;
-  document.getElementById('fanHeader').innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;flex-wrap:wrap">
-      <div>
-        ${potentialBadge(f.potential)}
-        &nbsp;<strong style="color:var(--text)">${escapeHtml(f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id)}</strong>
-        &nbsp;<span class="pill pill-${f.status}">${f.status}</span>
-        &nbsp;<span class="muted">${fmtMoney(f.total_spent)} envoyés</span>
+  const aiNotes = [
+    profileBlock('🧠 Notes', f.memory_notes),
+    profileBlock('💰 Budget', f.budget_notes),
+    profileBlock('❤️ Intérêts', f.interests_notes),
+    profileBlock('🤔 Objections', f.objections_notes),
+    profileBlock('⚠️ Alerte', f.red_flags_notes, true),
+  ].filter(Boolean).join('');
+  const fanHeaderEl = document.getElementById('fanHeader');
+  fanHeaderEl.style.display = 'flex';
+  fanHeaderEl.innerHTML = `
+    <div class="thread-header-top">
+      <div class="thread-header-id">
+        <div class="avatar" style="box-shadow:0 0 0 2px ${f.paused ? 'var(--red)' : (STATUS_COLORS[f.status]||STATUS_COLORS.new)}">${initials(f)}</div>
+        <div style="min-width:0">
+          <div class="thread-header-name">${escapeHtml(f.telegram_username ? '@'+f.telegram_username : f.first_name || f.telegram_user_id)}</div>
+          <div class="thread-header-sub">
+            ${potentialBadge(f.potential)}
+            <span class="pill pill-${f.status}">${f.status}</span>
+            <span class="thread-spent">💸 ${fmtMoney(f.total_spent)} envoyés</span>
+          </div>
+        </div>
       </div>
       <button class="btn ${f.paused ? 'btn-primary' : 'btn-ghost'} btn-sm" onclick="togglePause('${f.id}', ${!f.paused})">${f.paused ? "▶️ Reprendre l'IA" : '⏸ Mettre en pause'}</button>
     </div>
-    <div class="profile-panel">
-      ${profileBlock('🧠 Notes', f.memory_notes)}
-      ${profileBlock('💰 Budget', f.budget_notes)}
-      ${profileBlock('❤️ Intérêts', f.interests_notes)}
-      ${profileBlock('🤔 Objections', f.objections_notes)}
-      ${profileBlock('⚠️ Alerte', f.red_flags_notes, true)}
-      <div class="profile-row" style="align-items:flex-start">
-        <span class="profile-label">📌 Ta note</span>
+    <div>
+      <div class="ai-notes-grid">
+        ${aiNotes || '<span class="ai-note-empty">L\'IA n\'a encore rien retenu sur ce fan.</span>'}
+      </div>
+      <div class="admin-note-row" style="margin-top:8px">
+        <span class="ico">📌</span>
         <div style="flex:1;display:flex;gap:6px;align-items:flex-start">
-          <textarea id="adminNoteInput" placeholder="Note perso (visible seulement par toi, jamais par l'IA)" style="min-height:34px;font-size:.82rem">${escapeHtml(f.admin_note || '')}</textarea>
+          <textarea id="adminNoteInput" placeholder="Note perso (visible seulement par toi, jamais par l'IA)" style="min-height:32px;font-size:.8rem">${escapeHtml(f.admin_note || '')}</textarea>
           <button class="btn btn-ghost btn-sm" style="flex:0 0 auto" onclick="saveAdminNote('${f.id}')">💾</button>
         </div>
       </div>
