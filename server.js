@@ -53,9 +53,16 @@ const {
   getStalledConversations,
   listSettingsHistory,
   restoreSettingsVersion,
+  getVariantsForField,
+  getVariantStats,
+  getScriptVariantById,
+  logVariantEvent,
+  createScriptVariant,
+  updateScriptVariant,
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt, generateScriptSuggestion } = require('./lib/claudeAgent');
+const { rememberFanNoteEmbedding } = require('./lib/embeddings');
 const { sendMessage, sendPhoto, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
 const {
@@ -450,12 +457,43 @@ async function handleIncomingMessage(msg, opts = {}) {
         return;
       }
 
-      const introTemplate =
-        fan.ab_variant === 'B' && settings.intro_message_b ? settings.intro_message_b : settings.intro_message;
+      // MISE À JOUR 30/08/2026 — le message d'accueil vient maintenant du
+      // système de variantes + bandit (voir lib/supabase.js, getOrCreateFan)
+      // quand au moins une variante 'intro_message' existe en base : la
+      // variante a déjà été assignée à ce fan à sa création
+      // (fan.variant_assignments.intro_message). On ne relit pas la variante
+      // "gagnante" au moment du /start — on utilise celle assignée à CE fan
+      // précisément, pour que le bandit compare des groupes stables. Si aucune
+      // variante n'est configurée (aucune ligne dans script_variants), on
+      // retombe exactement sur l'ancien comportement (settings.intro_message /
+      // intro_message_b) — aucun changement pour une installation qui n'a pas
+      // encore créé de variante depuis le nouveau panneau du dashboard.
+      const assignedVariantId = fan.variant_assignments && fan.variant_assignments.intro_message;
+      let introTemplate = null;
+      if (assignedVariantId) {
+        try {
+          const variant = await getScriptVariantById(assignedVariantId);
+          if (variant && variant.content) introTemplate = variant.content;
+        } catch (err) {
+          console.error('Erreur lecture variante intro assignée (non bloquant):', err.message);
+        }
+      }
+      if (!introTemplate) {
+        introTemplate =
+          fan.ab_variant === 'B' && settings.intro_message_b ? settings.intro_message_b : settings.intro_message;
+      }
       const intro = introTemplate
         .replace('{persona_name}', settings.persona_name)
         .replace('{creator_name}', settings.creator_name);
       await replyToFan({ settings, chatId, fan, text: intro });
+
+      // Expose l'événement seulement maintenant (au vrai envoi), pas à la
+      // création du fan — c'est le moment où l'exposition est réelle.
+      if (assignedVariantId) {
+        logVariantEvent(assignedVariantId, fan.id, 'exposed').catch((err) =>
+          console.error('Erreur log exposition variante (non bloquant):', err.message)
+        );
+      }
       return;
     }
 
@@ -660,6 +698,18 @@ async function handleIncomingMessage(msg, opts = {}) {
         if (call.input.red_flags_notes) patch.red_flags_notes = call.input.red_flags_notes;
         if (call.input.country) patch.country = call.input.country;
         await updateFanProfile(fan.id, patch);
+
+        // MISE À JOUR 30/08/2026 — mémoire vectorielle (pgvector), premier
+        // étage : chaque réécriture de la note générale est aussi enregistrée
+        // comme embedding (voir lib/embeddings.js), pour un rappel sémantique
+        // plus tard même si cette note a depuis été réécrite. Fire-and-forget
+        // volontaire : ne doit jamais ralentir la réponse au fan, et est un
+        // no-op silencieux tant qu'OPENAI_API_KEY n'est pas configurée.
+        if (call.input.notes) {
+          rememberFanNoteEmbedding(fan.id, call.input.notes).catch((err) =>
+            console.error('Erreur embedding mémoire fan (non bloquant):', err.message)
+          );
+        }
       }
     }
   } catch (err) {
@@ -784,6 +834,44 @@ app.post('/api/admin/generate-script-suggestion', requireAdminToken, async (req,
     res.json(suggestion);
   } catch (err) {
     console.error('Erreur génération suggestion de script:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: variantes de script + bandit (voir lib/supabase.js et
+// lib/banditMath.js) ----------
+// MISE À JOUR 30/08/2026 — remplace/généralise l'ancien A/B figé
+// (settings.intro_message / intro_message_b, tirage 50/50). `field_key`
+// identifie le champ de script concerné ('intro_message' est le seul câblé
+// de bout en bout côté /start pour l'instant — voir handleIncomingMessage).
+app.get('/api/admin/script-variants', requireAdminToken, async (req, res) => {
+  try {
+    const field_key = typeof req.query.field_key === 'string' && req.query.field_key ? req.query.field_key : 'intro_message';
+    const variants = await getVariantStats(field_key);
+    res.json(variants);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/script-variants', requireAdminToken, async (req, res) => {
+  try {
+    const { field_key, label, content } = req.body || {};
+    if (!field_key || !content || !content.trim()) {
+      return res.status(400).json({ error: 'field_key et content sont obligatoires.' });
+    }
+    const variant = await createScriptVariant({ field_key, label, content: content.trim() });
+    res.json(variant);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/script-variants/:id', requireAdminToken, async (req, res) => {
+  try {
+    const variant = await updateScriptVariant(req.params.id, req.body || {});
+    res.json(variant);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

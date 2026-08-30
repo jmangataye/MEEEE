@@ -1065,6 +1065,21 @@
       </div>
 
       <div class="panel">
+        <h3 class="with-icon"><span class="psec-icon">🎯</span> Optimisation automatique (bandit)</h3>
+        <div class="persona-hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none"/></svg>
+          <div>Au lieu d'un simple test A/B 50/50, chaque nouveau fan reçoit automatiquement la variante de message d'accueil qui convertit statistiquement le mieux jusqu'ici (algorithme de bandit) — tout en continuant à tester les autres pour ne jamais rester bloqué sur un choix figé. Ajoute ici autant de variantes que tu veux ; le champ "variante A" ci-dessus sert de version de secours tant qu'aucune variante n'est créée ici.</div>
+        </div>
+        <div id="scriptVariantsList" class="ai-notes-grid" style="margin-bottom:12px"></div>
+        <label>Nouvelle variante — texte (variables: {persona_name}, {creator_name})</label>
+        <textarea id="newVariantContent" rows="2"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <input type="text" id="newVariantLabel" placeholder="Nom court (ex: C - plus direct)" style="flex:1" />
+          <button class="btn btn-primary" onclick="addScriptVariantClick()">+ Ajouter la variante</button>
+        </div>
+      </div>
+
+      <div class="panel">
         <h3 class="with-icon"><span class="psec-icon">2</span> Qualification</h3>
         <p class="muted" style="margin-top:-6px">Comment l'IA doit comprendre ce que cherche le fan avant de vendre (instruction pour l'IA, pas un message figé).</p>
         <textarea id="script_qualification"></textarea>
@@ -1476,6 +1491,7 @@ function showPersonaSection(name){
   // d'être rafraîchi tant qu'on ne va pas le consulter.
   if (name === 'historique') loadSettingsHistory();
   if (name === 'prix') renderNegotiableItemsList();
+  if (name === 'script') loadScriptVariants();
 }
 
 // Liste en direct des articles marqués "négociable" dans le Catalogue — sert
@@ -2014,6 +2030,74 @@ async function generateScriptSuggestionClick(){
     showToast('Erreur génération: ' + err.message, true);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✨ Générer une suggestion'; }
+  }
+}
+
+// MISE À JOUR 30/08/2026 — panneau "Optimisation automatique (bandit)"
+// (voir Persona & Script → Script de vente). Remplace/complète le test A/B
+// figé 50/50 (intro_message / intro_message_b) par un vrai bandit multi-bras
+// (voir lib/banditMath.js côté serveur) : chaque variante active affiche ici
+// ses expositions, ses conversions et son taux, calculés en direct.
+async function loadScriptVariants(){
+  const el = document.getElementById('scriptVariantsList');
+  if (!el) return;
+  el.innerHTML = '<p class="muted">Chargement…</p>';
+  try {
+    const variants = await api('/api/admin/script-variants?field_key=intro_message');
+    renderScriptVariants(variants);
+  } catch (err) {
+    el.innerHTML = '';
+    showToast('Erreur chargement variantes: ' + err.message, true);
+  }
+}
+
+function renderScriptVariants(variants){
+  const el = document.getElementById('scriptVariantsList');
+  if (!el) return;
+  if (!variants || !variants.length) {
+    el.innerHTML = '<p class="muted">Aucune variante créée pour l\'instant — le message d\'accueil "variante A" ci-dessus est utilisé pour tout le monde. Ajoute une première variante ci-dessous pour activer le bandit.</p>';
+    return;
+  }
+  const best = variants.filter(v => v.active && v.exposures >= 10).sort((a,b) => (b.conversion_rate||0) - (a.conversion_rate||0))[0];
+  el.innerHTML = variants.map(v => {
+    const rate = v.conversion_rate === null ? '—' : (v.conversion_rate * 100).toFixed(1) + '%';
+    const isBest = best && v.id === best.id;
+    return `<div class="ai-note-card${v.active ? '' : ' danger'}">
+      <span class="ico">${v.active ? '🟢' : '⏸️'}</span>
+      <div style="flex:1">
+        <span class="lbl">${escapeHtml(v.label || 'Variante')}${isBest ? ' · 🏆 meilleure actuellement' : ''}</span>
+        <div style="font-size:.82rem;margin:4px 0">${escapeHtml(v.content)}</div>
+        <div class="muted" style="font-size:.76rem">${v.exposures} exposition(s) · ${v.conversions} conversion(s) · taux ${rate}</div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="toggleScriptVariantActive('${v.id}', ${!v.active})">${v.active ? 'Mettre en pause' : 'Réactiver'}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addScriptVariantClick(){
+  const contentEl = document.getElementById('newVariantContent');
+  const labelEl = document.getElementById('newVariantLabel');
+  const content = (contentEl?.value || '').trim();
+  if (!content) { showToast('Écris le texte de la variante avant de l\'ajouter.', true); return; }
+  try {
+    await api('/api/admin/script-variants', { method: 'POST', body: JSON.stringify({ field_key: 'intro_message', label: labelEl?.value.trim() || null, content }) });
+    if (contentEl) contentEl.value = '';
+    if (labelEl) labelEl.value = '';
+    showToast('Variante ajoutée — le bandit va commencer à la tester.');
+    loadScriptVariants();
+  } catch (err) {
+    showToast('Erreur ajout variante: ' + err.message, true);
+  }
+}
+
+async function toggleScriptVariantActive(id, active){
+  try {
+    await api('/api/admin/script-variants/' + id, { method: 'PATCH', body: JSON.stringify({ active }) });
+    loadScriptVariants();
+  } catch (err) {
+    showToast('Erreur mise à jour variante: ' + err.message, true);
   }
 }
 
