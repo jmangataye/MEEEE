@@ -44,6 +44,8 @@ const {
   addVaultAsset,
   deleteVaultAsset,
   getVaultSummary,
+  setCatalogItemPreview,
+  getSignedUrl,
   getAiUsageSince,
   setAiCreditBalance,
   getLiveOpsStats,
@@ -51,7 +53,7 @@ const {
   supabase,
 } = require('./lib/supabase');
 const { runAgentTurn, buildSystemPrompt } = require('./lib/claudeAgent');
-const { sendMessage, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
+const { sendMessage, sendPhoto, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
 const {
   reviewOutgoingText,
@@ -575,6 +577,31 @@ async function handleIncomingMessage(msg, opts = {}) {
           }
         }
       }
+      // ---------- Photo d'aperçu visible par le fan (nouveau, 30/08/2026) ----------
+      // Contrairement au coffre de contenu interne (jamais montré à personne),
+      // cette photo est réellement envoyée sur Telegram — Bryan veut pouvoir
+      // donner un vrai avant-goût visuel avant de vendre, pas juste du texte.
+      // On envoie via une URL signée temporaire (voir getSignedUrl) : le
+      // fichier reste dans un bucket privé, jamais rendu public en permanence.
+      if (call.name === 'send_preview') {
+        const item = catalog.find((c) => c.id === call.input.catalog_item_id);
+        if (!item || !item.preview_image_path) {
+          console.warn(`"send_preview" appelé sans aperçu disponible pour l'article demandé (fan ${fan.id}) — ignoré.`);
+          continue;
+        }
+        const previewUrl = await getSignedUrl(item.preview_image_path, 3600);
+        if (!previewUrl) continue;
+        try {
+          await sendPhoto(settings.telegram_bot_token, chatId, previewUrl, call.input.caption || undefined);
+          // Journalisé comme un message assistant classique pour que ça reste
+          // visible dans l'historique du dashboard (et dans le contexte donné
+          // à l'IA au tour suivant) — le contenu réel de la photo n'a pas
+          // besoin d'être stocké, juste la trace qu'elle a été envoyée.
+          await logMessage(fan.id, 'assistant', `[📸 foto de aperçu enviada: ${item.name}]`);
+        } catch (err) {
+          console.error('Erreur envoi photo d\'aperçu:', err);
+        }
+      }
       if (call.name === 'update_fan_status') {
         await setFanStatus(fan.id, call.input.status);
       }
@@ -707,7 +734,16 @@ app.post('/api/admin/test-alert', requireAdminToken, async (req, res) => {
 app.get('/api/admin/catalog', requireAdminToken, async (req, res) => {
   const { data, error } = await supabase.from('catalog_items').select('*').order('sort_order');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  // Ajoute une URL signée temporaire pour la photo d'aperçu visible-fan de
+  // chaque article (si elle existe) — pour que le dashboard (Assistant
+  // magique, Catalogue) puisse l'afficher sans exposer le bucket publiquement.
+  const withPreviews = await Promise.all(
+    (data || []).map(async (it) => ({
+      ...it,
+      preview_url: it.preview_image_path ? await getSignedUrl(it.preview_image_path, 3600) : null,
+    }))
+  );
+  res.json(withPreviews);
 });
 
 app.post('/api/admin/catalog', requireAdminToken, async (req, res) => {
@@ -731,6 +767,36 @@ app.delete('/api/admin/catalog/:id', requireAdminToken, async (req, res) => {
   const { error } = await supabase.from('catalog_items').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+
+// ---------- API Admin: photo d'aperçu VISIBLE PAR LE FAN d'un article ----------
+// Utilisé par l'Assistant magique (dashboard) — différent de l'upload du
+// coffre de contenu (/api/admin/vault/upload), qui reste interne à l'IA et
+// n'est jamais envoyé sur Telegram. Voir "send_preview" plus haut.
+app.post('/api/admin/catalog/:id/preview', requireAdminToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'aucun fichier reçu' });
+    const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const storagePath = `previews/${req.params.id}-${crypto.randomUUID()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage
+      .from('content-vault')
+      .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype });
+    if (uploadErr) throw uploadErr;
+    const updated = await setCatalogItemPreview(req.params.id, storagePath);
+    const previewUrl = await getSignedUrl(storagePath, 3600);
+    res.json({ ok: true, item: updated, previewUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/catalog/:id/preview', requireAdminToken, async (req, res) => {
+  try {
+    const updated = await setCatalogItemPreview(req.params.id, null);
+    res.json({ ok: true, item: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------- API Admin: fans en direct + conversations ----------
