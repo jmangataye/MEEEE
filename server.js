@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const fetch = require('node-fetch');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 80 * 1024 * 1024 } });
 
 const {
@@ -1164,7 +1165,24 @@ app.delete('/api/admin/catalog/:id', requireAdminToken, async (req, res) => {
     .delete()
     .eq('id', req.params.id)
     .eq('tenant_id', req.tenantId);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    // MISE À JOUR 31/08/2026 — bug trouvé lors de l'audit : "supprimer" ne
+    // marchait pour AUCUN article réel du catalogue de Bryan, car chacun a
+    // déjà des ventes enregistrées (table `sales`, contrainte de clé étrangère
+    // catalog_item_id en ON DELETE NO ACTION — volontaire, pour ne jamais
+    // perdre l'historique des ventes). Supabase renvoyait donc une erreur SQL
+    // brute (code 23503) que l'admin ne pouvait pas comprendre ("ça ne marche
+    // pas" côté Bryan). On détecte ce cas précis pour répondre avec un message
+    // clair, et on ne touche PAS à la contrainte elle-même : l'historique des
+    // ventes doit rester intact, "Désactiver" (déjà dans le menu ⋯) est le bon
+    // geste pour retirer un article de la vente sans perdre cet historique.
+    if (error.code === '23503') {
+      return res.status(409).json({
+        error: "Impossible de supprimer : cet article a déjà des ventes enregistrées (l'historique des ventes est protégé). Utilise plutôt \"Désactiver\" dans le menu ⋯ pour le retirer de la vente sans rien perdre.",
+      });
+    }
+    return res.status(500).json({ error: error.message });
+  }
   res.json({ ok: true });
 });
 
@@ -1693,6 +1711,34 @@ app.get('/api/cron/reengagement', async (req, res) => {
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// ---------- Garde-fou anti-veille (cold start Render) ----------
+// MISE À JOUR 31/08/2026 — demandé par Bryan : que le bot "se réveille de
+// manière automatisée" sans dépendre d'un service externe (cron-job.org /
+// UptimeRobot) qu'il faudrait configurer à la main. Le plan gratuit Render
+// met le service en veille après ~15 min SANS TRAFIC HTTP ENTRANT (un
+// setInterval interne ne compte pas comme trafic, donc inutile pour éviter la
+// veille — en revanche, un appel sortant vers notre PROPRE URL publique, lui,
+// arrive bien comme une requête HTTP entrante classique et compte). On
+// s'auto-ping donc toutes les 10 minutes (< 15 min) tant que le process
+// tourne : ça ne peut évidemment pas réveiller le service une fois VRAIMENT
+// endormi (le process serait alors arrêté, plus personne pour lancer le
+// ping) — mais ça empêche le service de s'endormir en premier lieu tant
+// qu'il a déjà été réveillé une fois (ex: par un message Telegram ou une
+// visite du dashboard). RENDER_EXTERNAL_URL est fourni automatiquement par
+// Render sur tout service web — ce bloc est un no-op silencieux en local/dev.
+const SELF_PING_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_PING_URL) {
+  const SELF_PING_INTERVAL_MS = 10 * 60 * 1000;
+  setInterval(() => {
+    fetch(`${SELF_PING_URL}/health`).catch((err) => {
+      console.error('Garde-fou anti-veille: self-ping échoué (non bloquant):', err.message);
+    });
+  }, SELF_PING_INTERVAL_MS);
+  console.log(`Garde-fou anti-veille actif : self-ping toutes les 10 min vers ${SELF_PING_URL}/health`);
+} else {
+  console.log('Garde-fou anti-veille inactif (RENDER_EXTERNAL_URL absent — normal en local/dev).');
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Meeli bot server running on port ${PORT}`));

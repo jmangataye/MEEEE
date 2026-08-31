@@ -1252,6 +1252,7 @@
 <div id="toastStack"></div>
 <div id="modalRoot"></div>
 <div id="drawerRoot"></div>
+<div id="cardMenuRoot"></div>
 
 <script>
 // MISE À JOUR 30/08/2026 — faille de sécurité trouvée en audit : tout le
@@ -1303,7 +1304,14 @@ function showToast(message, isError){
   el.className = 'toast' + (isError ? ' err' : '');
   el.innerHTML = `<div>${message}</div><div class="toast-bar"></div>`;
   stack.appendChild(el);
-  setTimeout(() => el.remove(), 3400);
+  // MISE À JOUR 31/08/2026 — certains messages d'erreur (ex: suppression
+  // catalogue bloquée par des ventes existantes) sont volontairement plus
+  // longs et explicatifs qu'avant : 3.4s fixes ne laissaient pas le temps de
+  // les lire. Durée maintenant proportionnelle à la longueur du texte
+  // (bornée entre 3.4s et 9s).
+  const duration = Math.min(9000, Math.max(3400, message.length * 60));
+  el.querySelector('.toast-bar').style.animationDuration = duration + 'ms';
+  setTimeout(() => el.remove(), duration);
 }
 
 // ---- Confirmation stylée (remplace confirm() natif) — retourne une Promise<boolean> ----
@@ -1484,7 +1492,14 @@ function renderNegotiableItemsList(){
   if (!el) return;
   const negotiable = (catalogCache || []).filter(it => it.is_negotiable);
   if (!negotiable.length) {
-    el.innerHTML = 'Aucun article marqué négociable pour l\'instant — va dans <strong style="color:var(--text)">Catalogue</strong> pour cocher "négociable" sur un article.';
+    // MISE À JOUR 31/08/2026 — Bryan trouvait cet onglet "inutile" tant
+    // qu'aucun article n'est négociable. Le texte l'expliquait déjà, mais
+    // sans façon rapide d'agir : un vrai bouton qui saute directement dans
+    // Catalogue (au lieu de juste nommer l'onglet) referme la boucle.
+    el.innerHTML = `
+      <div>Aucun article marqué négociable pour l'instant.</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="showTab('catalog')">📇 Aller au Catalogue pour en marquer un</button>
+    `;
     return;
   }
   el.innerHTML = negotiable.map(it => `<span class="pill" style="margin:0 6px 6px 0">${escapeHtml(it.name)} — ${currencySymbol}${it.price}</span>`).join('');
@@ -2233,6 +2248,10 @@ async function copyPromptPreview(){
 }
 
 // ---- Coffre de contenu ----
+// MISE À JOUR 31/08/2026 — VAULT_CATEGORIES est aussi utilisé par le
+// Catalogue (voir catChip() et le champ "Catégorie" du panneau
+// Ajouter/Modifier un article, plus bas) : une seule et même taxonomie des
+// deux côtés, pour que "coffre" et "catalogue" restent cohérents.
 const VAULT_CATEGORIES = [
   { key: 'senos', icon: '💕', label: 'Seins' },
   { key: 'trasero', icon: '🍑', label: 'Fessier' },
@@ -2241,6 +2260,17 @@ const VAULT_CATEGORIES = [
   { key: 'rostro', icon: '😊', label: 'Visage' },
   { key: 'otro', icon: '➕', label: 'Autre' },
 ];
+
+// Petit badge catégorie réutilisé sur les cartes du Catalogue (voir
+// renderCatalog) et dans l'aperçu du panneau latéral (voir
+// refreshDrawerPreview) — même style visuel que le badge "négociable".
+function catChip(key){
+  if (!key) return '';
+  const cat = VAULT_CATEGORIES.find(c => c.key === key);
+  if (!cat) return '';
+  return `<span class="chip" style="background:rgba(167,139,250,.15);color:var(--violet)">${cat.icon} ${cat.label}</span>`;
+}
+
 let vaultCache = [];
 let previousVaultIds = new Set();
 
@@ -2262,7 +2292,7 @@ function renderVaultGrid(){
         <div class="vault-count">${photos} photo(s), ${videos} vidéo(s)</div>
         <select id="vault_link_${c.key}">
           <option value="">Lier à un article (optionnel)</option>
-          ${catalogCache.map(it => `<option value="${it.id}">${it.name}</option>`).join('')}
+          ${catalogLinkOptions(c.key)}
         </select>
         <div class="vault-file-row">
           <input type="file" id="vault_files_${c.key}" multiple accept="image/*,video/*" />
@@ -2271,6 +2301,25 @@ function renderVaultGrid(){
       </div>
     `;
   }).join('');
+}
+
+// MISE À JOUR 31/08/2026 — cohérence coffre ↔ catalogue demandée par Bryan :
+// avant, ce menu listait TOUS les articles du catalogue en vrac, peu importe
+// la catégorie de la carte (ex: le sélecteur de la carte "Seins" proposait
+// aussi bien des articles "Corps entier"), donc rien n'aidait à lier le bon
+// contenu au bon article. Maintenant que le Catalogue a lui aussi un champ
+// Catégorie (voir openCatalogDrawer/saveCatalogDrawer), on met en avant dans
+// un groupe séparé les articles qui partagent la catégorie de cette carte du
+// coffre — les autres restent disponibles juste en dessous (rien n'est
+// caché, un article peut toujours être lié depuis n'importe quelle carte).
+function catalogLinkOptions(categoryKey){
+  const matching = catalogCache.filter(it => it.category === categoryKey);
+  const others = catalogCache.filter(it => it.category !== categoryKey);
+  const opt = (it) => `<option value="${it.id}">${it.name}</option>`;
+  const parts = [];
+  if (matching.length) parts.push(`<optgroup label="Articles de cette catégorie">${matching.map(opt).join('')}</optgroup>`);
+  if (others.length) parts.push(`<optgroup label="${matching.length ? 'Autres articles' : 'Tous les articles'}">${others.map(opt).join('')}</optgroup>`);
+  return parts.join('');
 }
 
 function renderVaultGallery(){
@@ -2508,6 +2557,11 @@ async function compileWizard(){
         name: s.name, tier: s.tier || 'entry', price: Number(s.price), is_negotiable: !!s.is_negotiable,
         description: s.description || '', dropfans_link: s.dropfansLink || null, active: true,
         sort_order: steps.indexOf(s),
+        // MISE À JOUR 31/08/2026 — cohérence Assistant magique ↔ Catalogue :
+        // l'étape du wizard choisissait déjà une catégorie (pour le coffre de
+        // contenu, voir plus bas "fdVault"), mais ne la reportait jamais sur
+        // l'article du catalogue lui-même — les deux pouvaient diverger.
+        category: s.category || null,
       };
       const saved = s.catalog_item_id
         ? await api('/api/admin/catalog/' + s.catalog_item_id, { method: 'PUT', body: JSON.stringify(payload) })
@@ -2629,41 +2683,90 @@ function renderCatalog(){
       ${thumb ? `<img class="catalog-card-thumb" src="${thumb}" loading="lazy" />` : ''}
       <h4>${it.name} <span class="pill pill-tier-${it.tier}">${it.tier}</span> ${it.active ? '' : '<span class="pill pill-off">inactif</span>'}</h4>
       <div class="desc">${it.description||''}</div>
-      <div class="price">${fmtMoney(it.price)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''}</div>
+      <div class="price">${fmtMoney(it.price)} ${it.is_negotiable ? '<span class="chip">négociable</span>' : ''} ${catChip(it.category)}</div>
       <div>${it.dropfans_link ? '<a href="'+it.dropfans_link+'" target="_blank">voir le lien ↗</a>' : '<span class="chip-warn">'+ICON_WARN+' pas de lien Dropp.fans</span>'}</div>
       <div class="catalog-actions">
         <button class="btn btn-ghost btn-sm" onclick="openCatalogDrawer('edit','${it.id}')">${ICON_EDIT} Modifier</button>
         <div class="card-menu-wrap">
           <button class="btn btn-ghost btn-sm btn-icon" onclick="toggleCardMenu('${it.id}', event)" title="Plus d'actions">⋯</button>
-          ${openCardMenuId === it.id ? `
-            <div class="card-menu-list">
-              <button onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
-              <button onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
-              <button class="danger" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
-            </div>` : ''}
         </div>
       </div>
     </div>`;
   }).join('');
   const addCard = `<div class="catalog-card catalog-add-card" onclick="openCatalogDrawer('add')"><div class="plus">+</div><div>Ajouter un article</div></div>`;
   document.getElementById('catalogCards').innerHTML = (cards || '<p class="muted">Aucun article dans le catalogue.</p>') + addCard;
+  // Le menu ⋯ ouvert (s'il y en a un) est un portail indépendant du grid
+  // (voir toggleCardMenu / renderCardMenuPortal ci-dessous) — il ne dépend pas
+  // du re-rendu des cartes, mais on le referme si son ancre a disparu (ex:
+  // l'article vient d'être supprimé/dupliqué et la liste a changé).
+  if (openCardMenuId && !catalogCache.some(it => it.id === openCardMenuId)) closeCardMenu();
 }
+
+// ---- Menu "⋯" des cartes catalogue : rendu en portail (position:fixed) ----
+// MISE À JOUR 31/08/2026 — bug remonté par Bryan (capture d'écran) : quand le
+// catalogue a assez d'articles pour faire plusieurs lignes, le menu ouvert
+// depuis une carte de la 1ère ligne s'affichait EN PLEIN MILIEU de la carte
+// juste en dessous (2e ligne) — visuellement cassé, et surtout la carte
+// recouverte devenait difficile à cliquer correctement dessous (il fallait
+// souvent cliquer deux fois : une pour fermer le menu qui traînait par-dessus,
+// une pour l'action réelle). Cause : le menu était positionné en
+// `position:absolute` À L'INTÉRIEUR de la grille de cartes (`.catalog-cards`),
+// donc son placement dépendait du flux normal de la grille et pouvait
+// chevaucher n'importe quel voisin. Fix : le menu est maintenant un vrai
+// portail — un seul élément, rendu dans #cardMenuRoot (racine du <body>, hors
+// de toute grille), positionné en `position:fixed` calculé depuis le bouton
+// "⋯" cliqué (getBoundingClientRect), avec un z-index élevé (600) et sa
+// propre fermeture par clic-extérieur + touche Échap + scroll/resize. Il ne
+// peut plus jamais se retrouver visuellement "dans" une autre carte.
+let cardMenuAnchorId = null;
 
 function toggleCardMenu(id, ev){
   if (ev) ev.stopPropagation();
-  openCardMenuId = openCardMenuId === id ? null : id;
-  renderCatalog();
+  if (openCardMenuId === id) { closeCardMenu(); return; }
+  openCardMenuId = id;
+  cardMenuAnchorId = id;
+  renderCardMenuPortal(ev.currentTarget);
 }
-document.addEventListener('click', () => { if (openCardMenuId) { openCardMenuId = null; renderCatalog(); } });
+
+function closeCardMenu(){
+  if (!openCardMenuId) return;
+  openCardMenuId = null;
+  cardMenuAnchorId = null;
+  const root = document.getElementById('cardMenuRoot');
+  if (root) root.innerHTML = '';
+}
+
+function renderCardMenuPortal(anchorEl){
+  const root = document.getElementById('cardMenuRoot');
+  const it = catalogCache.find(x => x.id === openCardMenuId);
+  if (!root || !it || !anchorEl) { closeCardMenu(); return; }
+  const rect = anchorEl.getBoundingClientRect();
+  const menuWidth = 170;
+  // Aligné sous le bouton, en évitant de dépasser à droite de l'écran.
+  const left = Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8);
+  root.innerHTML = `
+    <div class="card-menu-list" style="position:fixed;top:${rect.bottom + 4}px;left:${Math.max(8, left)}px;min-width:${menuWidth}px;z-index:600" onclick="event.stopPropagation()">
+      <button onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
+      <button onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
+      <button class="danger" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
+    </div>`;
+}
+
+// Fermeture par clic n'importe où ailleurs, touche Échap, ou scroll/resize
+// (sinon un menu "fixed" resterait visuellement décroché de son bouton).
+document.addEventListener('click', () => closeCardMenu());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardMenu(); });
+window.addEventListener('scroll', () => closeCardMenu(), true);
+window.addEventListener('resize', () => closeCardMenu());
 
 async function duplicateItem(id){
-  openCardMenuId = null;
+  closeCardMenu();
   const it = catalogCache.find(x => x.id === id);
   if (!it) return;
   try {
     await api('/api/admin/catalog', { method:'POST', body: JSON.stringify({
       name: it.name + ' (copie)', tier: it.tier, price: it.price, is_negotiable: it.is_negotiable,
-      description: it.description, dropfans_link: null, active: false, sort_order: 99,
+      description: it.description, category: it.category || null, dropfans_link: null, active: false, sort_order: 99,
     })});
     showToast('Article dupliqué ✅');
     loadCatalog();
@@ -2673,19 +2776,23 @@ async function duplicateItem(id){
 }
 
 async function deleteItem(id){
-  openCardMenuId = null;
+  closeCardMenu();
   if (!(await showConfirm('Supprimer définitivement cet article du catalogue ?', 'Supprimer'))) return;
   try {
     await api('/api/admin/catalog/'+id, { method:'DELETE' });
     showToast('Article supprimé');
     loadCatalog();
   } catch (err) {
-    showToast('Erreur suppression: ' + err.message, true);
+    // MISE À JOUR 31/08/2026 — le serveur renvoie maintenant un message clair
+    // quand la suppression est bloquée parce que l'article a déjà des ventes
+    // (voir server.js) — on l'affiche tel quel, plus long que d'habitude donc
+    // pas de troncature ici.
+    showToast(err.message, true);
   }
 }
 
 async function toggleActive(id, active){
-  openCardMenuId = null;
+  closeCardMenu();
   try {
     await api('/api/admin/catalog/'+id, { method:'PUT', body: JSON.stringify({ active }) });
     showToast(active ? 'Article activé ✅' : 'Article désactivé');
@@ -2708,6 +2815,7 @@ function openCatalogDrawer(mode, id){
     active: it ? !!it.active : true,
     description: it ? it.description || '' : '',
     dropfans_link: it ? it.dropfans_link || '' : '',
+    category: it ? it.category || '' : '',
   };
   renderCatalogDrawer();
 }
@@ -2728,6 +2836,11 @@ function renderCatalogDrawer(){
         <input id="d_name" value="${(s.name||'').replace(/"/g,'&quot;')}" oninput="onDrawerInput()" />
         <label>Tier</label>
         <div class="tier-pick" id="d_tier_pick"></div>
+        <label>Catégorie <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">(optionnel — même liste que le Coffre de contenu)</span></label>
+        <select id="d_category" onchange="onDrawerInput()">
+          <option value="">— Aucune —</option>
+          ${VAULT_CATEGORIES.map(c => `<option value="${c.key}" ${s.category===c.key?'selected':''}>${c.icon} ${c.label}</option>`).join('')}
+        </select>
         <label>Prix</label>
         <input id="d_price" type="number" step="0.01" value="${s.price}" oninput="onDrawerInput()" />
         <label>Description</label>
@@ -2776,6 +2889,7 @@ function onDrawerInput(){
   drawerState.dropfans_link = document.getElementById('d_link').value;
   drawerState.negotiable = document.getElementById('d_negotiable').checked;
   drawerState.active = document.getElementById('d_active').checked;
+  drawerState.category = document.getElementById('d_category').value;
   refreshDrawerPreview();
 }
 
@@ -2786,7 +2900,7 @@ function refreshDrawerPreview(){
     <div class="catalog-card ${s.active?'':'off'}" style="border-top:3px solid ${TIER_COLORS[s.tier]||TIER_COLORS.entry};margin:0">
       <h4>${s.name || '(sans nom)'} <span class="pill pill-tier-${s.tier}">${s.tier}</span> ${s.active?'':'<span class="pill pill-off">inactif</span>'}</h4>
       <div class="desc">${s.description||''}</div>
-      <div class="price">${Number.isNaN(priceNum) ? '—' : fmtMoney(priceNum)} ${s.negotiable ? '<span class="chip">négociable</span>' : ''}</div>
+      <div class="price">${Number.isNaN(priceNum) ? '—' : fmtMoney(priceNum)} ${s.negotiable ? '<span class="chip">négociable</span>' : ''} ${catChip(s.category)}</div>
     </div>
   `;
   const warn = document.getElementById('d_link_warning');
@@ -2804,7 +2918,7 @@ async function saveCatalogDrawer(){
   if (Number.isNaN(price)) { showToast('Entre un prix valide.', true); return; }
   const payload = {
     name: s.name, tier: s.tier, price, is_negotiable: s.negotiable, active: s.active,
-    description: s.description, dropfans_link: s.dropfans_link || null,
+    description: s.description, dropfans_link: s.dropfans_link || null, category: s.category || null,
   };
   try {
     if (s.mode === 'add') {
