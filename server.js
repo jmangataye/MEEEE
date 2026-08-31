@@ -51,6 +51,7 @@ const {
   setAiCreditBalance,
   getLiveOpsStats,
   getStalledConversations,
+  getLiveAudiencePulse,
   listSettingsHistory,
   restoreSettingsVersion,
   getVariantsForField,
@@ -1343,6 +1344,21 @@ app.put('/api/admin/stalled-conversations/:fanId/dismiss', requireAdminToken, as
 app.get('/api/admin/analytics/geo', requireAdminToken, async (req, res) => {
   try {
     res.json(await getFanCountByCountry(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: pouls de l'audience en temps réel ----------
+// MISE À JOUR 31/08/2026 — demandé par Bryan : un panneau qui se réactualise
+// toutes les 1 min avec des indicateurs "chauds" (conversations chaudes,
+// potentiel de revenu, ce que les fans demandent) — voir
+// getLiveAudiencePulse() dans lib/supabase.js pour le détail de chaque calcul
+// et pourquoi certaines métriques évidentes (ex: "confirmé aujourd'hui")
+// n'existent volontairement pas.
+app.get('/api/admin/analytics/live-pulse', requireAdminToken, async (req, res) => {
+  try {
+    res.json(await getLiveAudiencePulse(req.tenantId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

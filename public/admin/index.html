@@ -751,6 +751,32 @@
         <div class="credit-block" id="creditBlock"></div>
       </div>
 
+      <!-- ---------- Analyse de l'audience en temps réel ----------
+           MISE À JOUR 31/08/2026 — demandé par Bryan : distinct du panneau
+           "Live Ops" ci-dessus (qui rafraîchit toutes les 5s et montre des
+           compteurs bruts déjà existants), celui-ci se concentre sur
+           l'audience elle-même — conversations chaudes MAINTENANT, argent en
+           jeu, et un vrai aperçu ("ce que disent les fans chauds") plutôt
+           qu'un score abstrait. Rafraîchi toutes les 60s (voir loadLivePulse
+           / setInterval plus bas) pour ne pas surcharger la base pour des
+           métriques qui n'ont pas besoin d'une précision à la seconde. -->
+      <div class="panel live-ops" id="livePulsePanel" style="border-color:rgba(167,139,250,.3);background:linear-gradient(160deg,rgba(167,139,250,.07),var(--surface) 55%)">
+        <div class="live-ops-head">
+          <div class="live-ops-title"><span class="live-dot" id="pulseDot" style="background:var(--violet)"></span> 🔥 Analyse de l'audience en temps réel</div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="live-ops-updated" id="pulseUpdated"></div>
+            <button class="btn btn-ghost btn-sm" onclick="loadLivePulse()">↻ Actualiser</button>
+          </div>
+        </div>
+        <p class="panel-sub" style="margin:-4px 0 14px">Se réactualise automatiquement toutes les minutes — pas besoin de recharger la page.</p>
+        <div class="live-grid" id="pulseGrid"></div>
+        <div id="pulseHeadline"></div>
+        <div style="margin-top:18px">
+          <h4 style="margin:0 0 10px;font-size:.9rem;color:var(--muted)">💬 Ce que disent les fans chauds en ce moment</h4>
+          <div id="pulseHotFeed" class="ai-notes-grid"></div>
+        </div>
+      </div>
+
       <div class="stat-grid stagger" id="stats"></div>
 
       <div class="panel">
@@ -1278,6 +1304,7 @@ function escapeHtml(str){
 let TOKEN = localStorage.getItem('meeli_admin_token') || '';
 let liveTimer = null;
 let overviewTimer = null;
+let pulseTimer = null;
 let selectedFanId = null;
 let testHistory = [];
 let threadMessageCounts = {};
@@ -1463,8 +1490,11 @@ function showTab(name){
   if (name === 'overview') {
     loadLiveOps();
     if (!overviewTimer) overviewTimer = setInterval(loadLiveOps, 10000);
+    loadLivePulse();
+    if (!pulseTimer) pulseTimer = setInterval(loadLivePulse, 60000);
   } else if (overviewTimer) {
     clearInterval(overviewTimer); overviewTimer = null;
+    if (pulseTimer) { clearInterval(pulseTimer); pulseTimer = null; }
   }
   if (name === 'sales') loadSales();
   if (name === 'persona') loadVault();
@@ -1549,10 +1579,11 @@ async function boot(){
   if (!TOKEN) return;
   try {
     await loadSettings();
-    await Promise.all([loadStats(), loadCatalog(), loadAdmins(), loadTimeseries(), loadLiveOps()]);
+    await Promise.all([loadStats(), loadCatalog(), loadAdmins(), loadTimeseries(), loadLiveOps(), loadLivePulse()]);
     document.getElementById('gate').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     if (!overviewTimer) overviewTimer = setInterval(loadLiveOps, 10000);
+    if (!pulseTimer) pulseTimer = setInterval(loadLivePulse, 60000);
     loadAdminIdentity();
     checkBotStatus();
     if (!botStatusTimer) botStatusTimer = setInterval(checkBotStatus, 20000);
@@ -1663,6 +1694,92 @@ async function loadLiveOps(){
         <div style="flex:0"><button class="btn btn-ghost btn-sm" onclick="updateCreditBalance()">Mettre à jour</button></div>
       </div>
     `;
+  }
+}
+
+// ---------- Analyse de l'audience en temps réel (panneau "Vue d'ensemble") ----------
+// MISE À JOUR 31/08/2026 — voir getLiveAudiencePulse() dans lib/supabase.js
+// pour le détail et le raisonnement derrière chaque métrique. Rafraîchi
+// toutes les 60s (voir pulseTimer) — volontairement plus lent que Live Ops
+// (10s) car ces chiffres (fans actifs aujourd'hui, valeur envoyée...) ne
+// changent pas assez vite pour justifier un aller-retour base plus fréquent.
+let previousPulseValues = null;
+function timeAgoShort(iso){
+  if (!iso) return '';
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return 'à l\'instant';
+  if (mins < 60) return `il y a ${mins} min`;
+  return `il y a ${Math.round(mins / 60)}h`;
+}
+
+async function loadLivePulse(){
+  let s;
+  try { s = await api('/api/admin/analytics/live-pulse'); } catch(e) { return; }
+  const updatedEl = document.getElementById('pulseUpdated');
+  if (updatedEl) updatedEl.textContent = 'Mis à jour ' + new Date().toLocaleTimeString('fr-FR');
+
+  const topCountry = s.topCountriesToday && s.topCountriesToday[0];
+  const cells = [
+    { key: 'hot', lv: s.hotCount, ll: '🔥 Conversations chaudes (2h)' },
+    { key: 'activeToday', lv: s.activeFansToday, ll: 'Fans actifs aujourd\'hui' },
+    { key: 'newToday', lv: s.newFansToday, ll: 'Nouveaux fans aujourd\'hui' },
+    { key: 'sentToday', lv: fmtMoney(s.sentTodayValue), ll: `Valeur envoyée aujourd'hui (${s.salesCountToday} lien${s.salesCountToday===1?'':'s'})`, text: true },
+    { key: 'pending', lv: fmtMoney(s.pendingValue), ll: 'En attente de paiement (total)', text: true },
+    { key: 'topCountry', lv: topCountry ? `${topCountry.country} (${topCountry.count})` : '—', ll: 'Pays le plus actif aujourd\'hui', text: true },
+  ];
+  const grid = document.getElementById('pulseGrid');
+  if (!grid) return;
+  grid.innerHTML = cells.map(c => `<div class="live-cell" id="pulse-cell-${c.key}"><div class="lv" id="pulse-lv-${c.key}">${c.text ? c.lv : 0}</div><div class="ll">${c.ll}</div></div>`).join('');
+  const nextValues = {};
+  cells.forEach(c => {
+    const lvEl = document.getElementById('pulse-lv-' + c.key);
+    if (c.text) { lvEl.textContent = c.lv; return; }
+    const to = c.lv ?? 0;
+    nextValues[c.key] = to;
+    const from = previousPulseValues ? (previousPulseValues[c.key] ?? to) : to;
+    animateCount(lvEl, from, to);
+    if (previousPulseValues && from !== to) {
+      const cellEl = document.getElementById('pulse-cell-' + c.key);
+      cellEl.classList.remove('flash-update');
+      void cellEl.offsetWidth;
+      cellEl.classList.add('flash-update');
+    }
+  });
+  previousPulseValues = nextValues;
+
+  // ---- Phrase-résumé du "ressenti" ----
+  // Composée à partir de chiffres réels (pas de synthèse IA ici : rapide,
+  // gratuit, et honnête sur ce qu'on sait vs ce qu'on ne fait qu'estimer).
+  const sent = s.sentiment || { potencial: 0, sin_potencial: 0, non_evalue: 0 };
+  const totalEval = sent.potencial + sent.sin_potencial;
+  const hotPct = totalEval > 0 ? Math.round((sent.potencial / totalEval) * 100) : null;
+  const topItem = s.topItemsToday && s.topItemsToday[0];
+  const headlineParts = [];
+  if (s.activeFansToday === 0) {
+    headlineParts.push("Aucun fan actif aujourd'hui pour l'instant.");
+  } else {
+    headlineParts.push(`Aujourd'hui : ${s.activeFansToday} fan${s.activeFansToday===1?'':'s'} actif${s.activeFansToday===1?'':'s'}, dont ${s.hotCount} identifié${s.hotCount===1?'':'s'} comme chaud${s.hotCount===1?'':'s'} 🔥 en ce moment.`);
+    if (hotPct != null) headlineParts.push(`Parmi les fans évalués aujourd'hui, ${hotPct}% montrent un vrai intérêt d'achat.`);
+  }
+  if (topItem) headlineParts.push(`Article le plus vendu aujourd'hui : <strong style="color:var(--text)">${escapeHtml(topItem.name)}</strong> (${topItem.count} vente${topItem.count===1?'':'s'}, ${fmtMoney(topItem.value)}).`);
+  const headlineEl = document.getElementById('pulseHeadline');
+  if (headlineEl) headlineEl.innerHTML = `<div class="persona-hint" style="margin-top:14px">${headlineParts.join(' ')}</div>`;
+
+  // ---- Aperçu vivant : ce que demandent les fans chauds en ce moment ----
+  const feedEl = document.getElementById('pulseHotFeed');
+  if (feedEl) {
+    if (!s.hotList || !s.hotList.length) {
+      feedEl.innerHTML = `<div class="ai-note-empty">Aucune conversation chaude active dans les 2 dernières heures pour l'instant.</div>`;
+    } else {
+      feedEl.innerHTML = s.hotList.map(f => `
+        <div class="ai-note-card"><span class="ico">🔥</span>
+          <div>
+            <span class="lbl">${escapeHtml(f.label)} — actif ${timeAgoShort(f.last_active_at)}${f.total_spent > 0 ? ` · déjà ${fmtMoney(f.total_spent)} dépensés` : ''}</span>
+            ${f.snippet ? escapeHtml(f.snippet) : '<span class="muted">Pas encore de note détaillée de l\'IA sur ce fan.</span>'}
+          </div>
+        </div>
+      `).join('');
+    }
   }
 }
 
