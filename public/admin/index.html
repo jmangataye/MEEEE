@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Meeli — Admin</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2040%2040%22%3E%0A%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%224%22%20y1%3D%222%22%20x2%3D%2236%22%20y2%3D%2238%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23f4b740%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23ff8a5c%22/%3E%3C/linearGradient%3E%3C/defs%3E%0A%3Cpath%20d%3D%22M20%201.2%2036.5%2010.6v18.8L20%2038.8%203.5%2029.4V10.6Z%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3Cg%20fill%3D%22%23241a05%22%3E%0A%3Cellipse%20cx%3D%2212.8%22%20cy%3D%2217.4%22%20rx%3D%226.3%22%20ry%3D%224%22%20transform%3D%22rotate%28-26%2012.8%2017.4%29%22%20opacity%3D%22.82%22/%3E%0A%3Cellipse%20cx%3D%2227.2%22%20cy%3D%2217.4%22%20rx%3D%226.3%22%20ry%3D%224%22%20transform%3D%22rotate%2826%2027.2%2017.4%29%22%20opacity%3D%22.82%22/%3E%0A%3Ccircle%20cx%3D%2220%22%20cy%3D%2217%22%20r%3D%222.7%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2218.6%22%20width%3D%2211.4%22%20height%3D%2212.6%22%20rx%3D%225.5%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2221.9%22%20width%3D%2211.4%22%20height%3D%222.5%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3Crect%20x%3D%2214.3%22%20y%3D%2226.1%22%20width%3D%2211.4%22%20height%3D%222.5%22%20fill%3D%22url%28%23g%29%22/%3E%0A%3C/g%3E%3C/svg%3E" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root{
     color-scheme: dark;
@@ -647,6 +646,38 @@
   .geo-map-fallback{margin-top:10px;color:var(--muted);font-size:.78rem}
   .geo-country-pill{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);
       border-radius:999px;padding:3px 10px;margin:3px 5px 0 0;font-size:.74rem}
+
+  /* ---------- MISE À JOUR 01/09/2026 — carte plus dynamique/interactive
+     (demandé par Bryan) : zoom molette + glisser pour naviguer, pins animés
+     (pulsation), liste "Top pays" cliquable reliée aux pins, et un compteur
+     résumé. Tout en SVG/CSS pur, aucune dépendance externe (voir plus haut
+     pourquoi c'est important sur cette page). ---------- */
+  .geo-map-canvas.dragging{cursor:grabbing}
+  .geo-map-canvas svg{cursor:grab}
+  .geo-pin-ring{fill:none;stroke:url(#geoPinGradient);stroke-width:1.4;opacity:0;transform-origin:center;
+      transform-box:fill-box;animation:geo-pulse 2.6s ease-out infinite}
+  .geo-pin.selected{stroke:#fff;stroke-width:1.4}
+  @keyframes geo-pulse{
+    0%{opacity:.55;transform:scale(1)}
+    100%{opacity:0;transform:scale(2.4)}
+  }
+  .geo-map-toolbar{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:6}
+  .geo-map-toolbar button{width:26px;height:26px;border-radius:7px;border:1px solid var(--border);
+      background:rgba(13,16,22,.8);color:var(--text);cursor:pointer;font-size:.85rem;line-height:1;
+      display:flex;align-items:center;justify-content:center}
+  .geo-map-toolbar button:hover{background:var(--surface-2)}
+  .geo-map-hint{position:absolute;bottom:8px;left:10px;font-size:.68rem;color:var(--muted);
+      background:rgba(13,16,22,.7);padding:3px 8px;border-radius:6px;z-index:6;pointer-events:none}
+  .geo-summary{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 12px;font-size:.78rem;color:var(--muted)}
+  .geo-summary strong{color:var(--text);font-size:.95rem}
+  .geo-top-list{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+  .geo-top-row{display:flex;align-items:center;gap:10px;padding:6px 9px;border-radius:8px;cursor:pointer;
+      border:1px solid transparent;transition:background .12s,border-color .12s}
+  .geo-top-row:hover,.geo-top-row.active{background:var(--surface-2);border-color:var(--border)}
+  .geo-top-row .bar-track{flex:1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+  .geo-top-row .bar-fill{height:100%;background:linear-gradient(90deg,#f4b740,#ff8a5c);border-radius:3px}
+  .geo-top-row .name{width:130px;flex:0 0 130px;font-size:.8rem;text-transform:capitalize}
+  .geo-top-row .count{width:34px;flex:0 0 34px;text-align:right;font-size:.78rem;font-weight:700}
 </style>
 </head>
 <body>
@@ -804,8 +835,22 @@
 
       <div class="panel">
         <h3>Revenu &amp; croissance (30 derniers jours)</h3>
+        <!-- MISE À JOUR 01/09/2026 — ce panneau restait vide en permanence chez
+             Bryan ("ne sert à rien"). Cause trouvée en comparant avec la carte
+             "Fans par pays" juste en dessous : celle-ci a DÉJÀ eu exactement ce
+             problème le 30/08 (tuiles CartoDB chargées depuis un CDN externe,
+             bloquées silencieusement par un bloqueur de pub/vie privée côté
+             navigateur — voir le commentaire sur GEO_MAP_WIDTH plus bas) et a
+             été corrigée en abandonnant tout CDN externe pour un rendu SVG
+             généré localement. Ce graphique utilisait Chart.js depuis
+             cdnjs.cloudflare.com : si ce script est bloqué, `loadTimeseries()`
+             sortait immédiatement (`typeof Chart === 'undefined'`) sans le
+             moindre message d'erreur — panneau vide, sans aucun indice pour
+             comprendre pourquoi. Même famille de bug, même remède : plus aucune
+             dépendance externe, un petit graphique SVG fait main (barres +
+             courbe) généré directement par loadTimeseries() ci-dessous. -->
         <div class="chart-card">
-          <div class="chart-wrap"><canvas id="revenueChart"></canvas></div>
+          <div class="chart-wrap"><svg id="revenueChart" viewBox="0 0 700 230" preserveAspectRatio="none" style="width:100%;height:100%;display:block" role="img" aria-label="Évolution du revenu et des nouveaux fans sur 30 jours"></svg></div>
           <div class="chart-legend" id="chartLegend"></div>
         </div>
       </div>
@@ -813,9 +858,16 @@
       <div class="panel">
         <h3>🌍 Fans par pays</h3>
         <p class="panel-sub">Se remplit progressivement : l'IA note le pays quand un fan le mentionne dans la conversation. Aucune donnée historique avant aujourd'hui — les pins apparaissent au fil des nouvelles conversations.</p>
+        <div class="geo-summary" id="geoSummary"></div>
         <div id="geoMapWrap">
           <div class="geo-map-canvas" id="geoMapCanvas">
-            <svg id="geoMapSvg" viewBox="0 0 980 383" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Carte du monde des fans par pays">
+            <div class="geo-map-toolbar">
+              <button type="button" onclick="geoMapZoom(1.35)" title="Zoomer">+</button>
+              <button type="button" onclick="geoMapZoom(1/1.35)" title="Dézoomer">−</button>
+              <button type="button" onclick="geoMapResetView()" title="Réinitialiser la vue">⟲</button>
+            </div>
+            <div class="geo-map-hint">Molette pour zoomer · glisser pour déplacer</div>
+            <svg id="geoMapSvg" viewBox="0 0 980 383" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Carte du monde des fans par pays, zoomable et déplaçable">
               <defs>
                 <linearGradient id="geoPinGradient" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0" stop-color="#f4b740"/>
@@ -829,6 +881,7 @@
             <div class="geo-map-tooltip" id="geoMapTooltip" hidden></div>
           </div>
           <div class="geo-map-fallback" id="geoMapFallback"></div>
+          <div class="geo-top-list" id="geoTopList"></div>
         </div>
       </div>
 
@@ -1333,7 +1386,6 @@ const ICON_POWER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 const TIER_COLORS = { entry:'#8b93a7', standard:'#60a5fa', premium:'#a78bfa', custom:'#f4b740' };
 const STATUS_COLORS = { new:'#8b93a7', engaged:'#60a5fa', customer:'#34d399', vip:'#f4b740', inactive:'#f87171' };
-let revenueChart = null;
 
 function saveToken(){
   TOKEN = document.getElementById('tokenInput').value.trim();
@@ -1812,10 +1864,67 @@ async function updateCreditBalance(){
   }
 }
 
+// Petit graphique SVG fait main (barres = revenu, courbe = nouveaux fans) —
+// voir le commentaire au-dessus du <svg id="revenueChart"> dans le HTML pour
+// le pourquoi (remplace Chart.js/CDN, panneau vide chez Bryan). Aucune
+// dépendance externe, aucun risque de blocage réseau silencieux.
+function renderTimeseriesChart(data){
+  const svg = document.getElementById('revenueChart');
+  if (!svg) return;
+  const W = 700, H = 230, padL = 6, padR = 6, padT = 10, padB = 24;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  const n = data.length;
+  const revenue = data.map(d => Number(d.revenue) || 0);
+  const newFans = data.map(d => Number(d.newFans) || 0);
+  const maxRevenue = Math.max(1, ...revenue);
+  const maxFans = Math.max(1, ...newFans);
+  const slot = n > 0 ? chartW / n : chartW;
+  const barW = Math.max(1, slot * 0.55);
+
+  const xAt = (i) => padL + slot * i + slot / 2;
+  const yRevenueAt = (v) => padT + chartH - (v / maxRevenue) * chartH;
+  const yFansAt = (v) => padT + chartH - (v / maxFans) * chartH;
+
+  // Repères horizontaux (0 / 50% / 100%) — purement visuels, comme les
+  // "grid lines" que Chart.js dessinait.
+  let gridLines = '';
+  [0, 0.5, 1].forEach((f) => {
+    const y = (padT + chartH * (1 - f)).toFixed(1);
+    gridLines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>`;
+  });
+
+  // Barres de revenu
+  let bars = '';
+  data.forEach((d, i) => {
+    const x = (xAt(i) - barW / 2).toFixed(1);
+    const y = yRevenueAt(revenue[i]).toFixed(1);
+    const h = (chartH - (yRevenueAt(revenue[i]) - padT)).toFixed(1);
+    bars += `<rect x="${x}" y="${y}" width="${barW.toFixed(1)}" height="${Math.max(0, h)}" rx="1.5" fill="var(--accent)" opacity="${revenue[i] > 0 ? 0.85 : 0.12}"><title>${new Date(d.date + 'T00:00:00').toLocaleDateString('fr-FR')} — ${fmtMoney(revenue[i])}</title></rect>`;
+  });
+
+  // Courbe des nouveaux fans
+  let points = data.map((d, i) => `${xAt(i).toFixed(1)},${yFansAt(newFans[i]).toFixed(1)}`);
+  const linePath = points.length ? 'M' + points.join(' L') : '';
+  let dots = '';
+  data.forEach((d, i) => {
+    dots += `<circle cx="${xAt(i).toFixed(1)}" cy="${yFansAt(newFans[i]).toFixed(1)}" r="2.4" fill="var(--blue)"><title>${new Date(d.date + 'T00:00:00').toLocaleDateString('fr-FR')} — ${newFans[i]} nouveau${newFans[i]===1?'':'x'} fan${newFans[i]===1?'':'s'}</title></circle>`;
+  });
+
+  // Étiquettes de dates — une tous les ~5 jours pour ne pas se chevaucher
+  // (équivalent de l'autoSkip que faisait Chart.js).
+  let labels = '';
+  const labelEvery = Math.max(1, Math.round(n / 6));
+  data.forEach((d, i) => {
+    if (i % labelEvery !== 0 && i !== n - 1) return;
+    const lbl = new Date(d.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' });
+    labels += `<text x="${xAt(i).toFixed(1)}" y="${H - 6}" font-size="9" fill="#8b93a7" text-anchor="middle">${lbl}</text>`;
+  });
+
+  svg.innerHTML = `${gridLines}${bars}${linePath ? `<path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` : ''}${dots}${labels}`;
+}
+
 async function loadTimeseries(){
-  if (typeof Chart === 'undefined') return; // CDN indisponible (offline) — le reste du dashboard marche quand même
   const data = await api('/api/admin/analytics/timeseries?days=30');
-  const labels = data.map(d => new Date(d.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }));
   const revenue = data.map(d => d.revenue);
   const newFans = data.map(d => d.newFans);
   const totalRevenue = revenue.reduce((a,b)=>a+b,0);
@@ -1826,28 +1935,7 @@ async function loadTimeseries(){
     <div class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span><div><div class="lv">${totalFans}</div><div class="ll">Nouveaux fans (30j)</div></div></div>
   `;
 
-  const ctx = document.getElementById('revenueChart').getContext('2d');
-  if (revenueChart) revenueChart.destroy();
-  revenueChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label:'Revenu', data:revenue, borderColor:'#f4b740', backgroundColor:'rgba(244,183,64,.14)', fill:true, tension:.35, yAxisID:'y', pointRadius:0, borderWidth:2.4 },
-        { label:'Nouveaux fans', data:newFans, borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.08)', fill:true, tension:.35, yAxisID:'y1', pointRadius:0, borderWidth:2.4 },
-      ],
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      interaction:{ mode:'index', intersect:false },
-      plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:'#1c202c', borderColor:'#272c3a', borderWidth:1, titleColor:'#f2f4f8', bodyColor:'#f2f4f8' } },
-      scales:{
-        x:{ grid:{ color:'rgba(255,255,255,.05)' }, ticks:{ color:'#8b93a7', maxRotation:0, autoSkip:true } },
-        y:{ position:'left', grid:{ color:'rgba(255,255,255,.05)' }, ticks:{ color:'#8b93a7' } },
-        y1:{ position:'right', grid:{ display:false }, ticks:{ color:'#8b93a7' } },
-      },
-    },
-  });
+  renderTimeseriesChart(data);
 }
 
 function fmtMoney(n){ return (currencySymbol||'$') + Number(n||0).toFixed(2); }
@@ -1855,6 +1943,17 @@ function fmtMoney(n){ return (currencySymbol||'$') + Number(n||0).toFixed(2); }
 async function loadStats(){
   const s = await api('/api/admin/analytics');
   const icon = (svg, bg, color) => `<div class="stat-icon" style="background:${bg};color:${color}">${svg}</div>`;
+  // MISE À JOUR 01/09/2026 — Bryan a repéré que "Liens envoyés (revenu estimé)"
+  // et "Payé confirmé" étaient affichés ICI en cartes, puis RE-affichés
+  // juste en dessous dans le panneau "Revenu potentiel vs confirmé"
+  // (renderRevenueCompare, appelé avec exactement s.revenue/s.paidRevenue) —
+  // les deux mêmes chiffres, deux présentations, à quelques centimètres
+  // d'écart. On garde la comparaison visuelle (plus parlante, montre le taux)
+  // et on remplace ces deux cartes par deux chiffres qui n'existent nulle
+  // part ailleurs sur la page : le panier moyen des ventes confirmées, et le
+  // taux de conversion fans → ventes confirmées.
+  const avgBasket = s.paidSalesCount > 0 ? (Number(s.paidRevenue) || 0) / s.paidSalesCount : 0;
+  const conversionRate = s.fanCount > 0 ? Math.round(((s.paidSalesCount || 0) / s.fanCount) * 100) : 0;
   document.getElementById('stats').innerHTML = `
     <div class="stat-card">
       <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></svg>','rgba(96,165,250,.15)','#60a5fa')}</div>
@@ -1862,11 +1961,11 @@ async function loadStats(){
     </div>
     <div class="stat-card">
       <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M9.3 15c.3 1 1.3 1.6 2.7 1.6 1.7 0 2.7-.8 2.7-2 0-3-5.4-1.6-5.4-4.6 0-1.2 1-2 2.7-2 1.4 0 2.4.6 2.7 1.6"/></svg>','var(--accent-soft)','var(--accent)')}</div>
-      <div class="stat-value">${fmtMoney(s.revenue)}</div><div class="stat-label">Liens envoyés (revenu estimé)</div>
+      <div class="stat-value">${fmtMoney(avgBasket)}</div><div class="stat-label">Panier moyen (ventes confirmées)</div>
     </div>
     <div class="stat-card">
       <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7 9.5 17.5 4 12"/></svg>','rgba(52,211,153,.15)','var(--green)')}</div>
-      <div class="stat-value">${fmtMoney(s.paidRevenue)}</div><div class="stat-label">Payé confirmé (${s.paidSalesCount||0} ventes)</div>
+      <div class="stat-value">${conversionRate}%</div><div class="stat-label">Conversion fans → ventes confirmées (${s.paidSalesCount||0})</div>
     </div>
     <div class="stat-card">
       <div class="stat-top">${icon('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8L12 3.5z"/></svg>','rgba(244,183,64,.16)','var(--accent)')}</div>
@@ -1933,27 +2032,155 @@ async function loadGeoMap(){
   }
 }
 
+// ---------- MISE À JOUR 01/09/2026 — carte "plus dynamique et interactive"
+// (demandé par Bryan). Zoom/pan en manipulant le viewBox du SVG à la main
+// (aucune lib externe — même philosophie que le reste de cette carte, voir
+// commentaire GEO_MAP_WIDTH plus haut). geoView garde l'état courant du
+// cadrage ; les bornes empêchent de dézoomer plus large que la carte de base
+// ou de zoomer au point de perdre le contexte. ----------
+const GEO_BASE_VIEW = { x: 0, y: 0, w: 980, h: 383 };
+let geoView = { ...GEO_BASE_VIEW };
+let geoLastCounts = {};
+
+function applyGeoView(){
+  const svg = document.getElementById('geoMapSvg');
+  if (svg) svg.setAttribute('viewBox', `${geoView.x.toFixed(1)} ${geoView.y.toFixed(1)} ${geoView.w.toFixed(1)} ${geoView.h.toFixed(1)}`);
+}
+
+function clampGeoView(v){
+  const minW = GEO_BASE_VIEW.w / 6; // zoom max ×6
+  v.w = Math.min(GEO_BASE_VIEW.w, Math.max(minW, v.w));
+  v.h = v.w * (GEO_BASE_VIEW.h / GEO_BASE_VIEW.w);
+  v.x = Math.min(GEO_BASE_VIEW.w - v.w, Math.max(0, v.x));
+  v.y = Math.min(GEO_BASE_VIEW.h - v.h, Math.max(0, v.y));
+  return v;
+}
+
+function geoMapZoom(factor, cx, cy){
+  // cx/cy (coordonnées SVG) = point sous la souris à garder fixe pendant le
+  // zoom ; à défaut (boutons de la barre d'outils), on zoome sur le centre.
+  const fx = cx != null ? cx : geoView.x + geoView.w / 2;
+  const fy = cy != null ? cy : geoView.y + geoView.h / 2;
+  const newW = geoView.w / factor;
+  const newH = geoView.h / factor;
+  geoView = clampGeoView({
+    w: newW, h: newH,
+    x: fx - (fx - geoView.x) * (newW / geoView.w),
+    y: fy - (fy - geoView.y) * (newH / geoView.h),
+  });
+  applyGeoView();
+}
+
+function geoMapResetView(){
+  geoView = { ...GEO_BASE_VIEW };
+  applyGeoView();
+  document.querySelectorAll('.geo-top-row.active').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.geo-pin.selected').forEach(el => el.classList.remove('selected'));
+}
+
+function svgPointFromEvent(svg, ev){
+  const pt = svg.createSVGPoint();
+  pt.x = ev.clientX; pt.y = ev.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return { x: geoView.x + geoView.w / 2, y: geoView.y + geoView.h / 2 };
+  const loc = pt.matrixTransform(ctm.inverse());
+  return { x: loc.x, y: loc.y };
+}
+
+let geoInteractionInitDone = false;
+function initGeoMapInteraction(){
+  if (geoInteractionInitDone) return; // évite d'attacher les listeners à chaque rafraîchissement (toutes les 10s)
+  const svg = document.getElementById('geoMapSvg');
+  const canvas = document.getElementById('geoMapCanvas');
+  if (!svg || !canvas) return;
+  geoInteractionInitDone = true;
+
+  svg.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const pt = svgPointFromEvent(svg, ev);
+    geoMapZoom(ev.deltaY < 0 ? 1.25 : 1 / 1.25, pt.x, pt.y);
+  }, { passive: false });
+
+  let dragging = false, lastX = 0, lastY = 0;
+  svg.addEventListener('pointerdown', (ev) => {
+    dragging = true; lastX = ev.clientX; lastY = ev.clientY;
+    canvas.classList.add('dragging');
+    svg.setPointerCapture(ev.pointerId);
+  });
+  svg.addEventListener('pointermove', (ev) => {
+    if (!dragging) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = geoView.w / rect.width, scaleY = geoView.h / rect.height;
+    geoView = clampGeoView({
+      w: geoView.w, h: geoView.h,
+      x: geoView.x - (ev.clientX - lastX) * scaleX,
+      y: geoView.y - (ev.clientY - lastY) * scaleY,
+    });
+    lastX = ev.clientX; lastY = ev.clientY;
+    applyGeoView();
+  });
+  const endDrag = () => { dragging = false; canvas.classList.remove('dragging'); };
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointerleave', endDrag);
+}
+
+// Centre/zoome la carte sur un pays (appelé en cliquant une ligne de la liste
+// "Top pays") et met en surbrillance la ligne + le pin correspondants.
+function geoFocusCountry(key){
+  const centroid = COUNTRY_CENTROIDS[key];
+  if (!centroid) return;
+  const { x, y } = projectLatLon(centroid[0], centroid[1]);
+  const targetW = Math.max(GEO_BASE_VIEW.w / 4, 140);
+  geoView = clampGeoView({ w: targetW, h: targetW * (GEO_BASE_VIEW.h / GEO_BASE_VIEW.w), x: x - targetW / 2, y: y - (targetW * (GEO_BASE_VIEW.h / GEO_BASE_VIEW.w)) / 2 });
+  applyGeoView();
+  document.querySelectorAll('.geo-top-row.active').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.geo-pin.selected').forEach(el => el.classList.remove('selected'));
+  const row = document.getElementById('geo-row-' + key);
+  const pin = document.getElementById('geo-pin-' + key);
+  if (row) row.classList.add('active');
+  if (pin) pin.classList.add('selected');
+}
+
 function renderGeoMap(counts){
   const layer = document.getElementById('geoPinsLayer');
   const fallback = document.getElementById('geoMapFallback');
   const tooltip = document.getElementById('geoMapTooltip');
+  const summary = document.getElementById('geoSummary');
+  const topList = document.getElementById('geoTopList');
   if (!layer) return;
+  geoLastCounts = counts;
+  initGeoMapInteraction();
   try {
     layer.innerHTML = '';
-    const entries = Object.entries(counts);
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     const unmatched = [];
+    const located = [];
     const maxCount = Math.max(1, ...entries.map(([, n]) => n));
+    const totalFans = entries.reduce((sum, [, n]) => sum + n, 0);
     entries.forEach(([country, count]) => {
       const key = normalizeCountryName(country);
       const centroid = COUNTRY_CENTROIDS[key];
       if (!centroid) { unmatched.push([country, count]); return; }
+      located.push([country, count, key]);
       const { x, y } = projectLatLon(centroid[0], centroid[1]);
       const radius = 4 + 7 * Math.sqrt(count / maxCount);
+      // Anneau de pulsation (purement décoratif — donne un effet "vivant" à
+      // la carte au lieu de pins figés) rendu AVANT le pin plein pour rester dessous.
+      const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      ring.setAttribute('cx', x.toFixed(1));
+      ring.setAttribute('cy', y.toFixed(1));
+      ring.setAttribute('r', radius.toFixed(1));
+      ring.setAttribute('class', 'geo-pin-ring');
+      ring.style.animationDelay = (Math.random() * 2).toFixed(2) + 's';
+      layer.appendChild(ring);
+
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       circle.setAttribute('cx', x.toFixed(1));
       circle.setAttribute('cy', y.toFixed(1));
       circle.setAttribute('r', radius.toFixed(1));
       circle.setAttribute('class', 'geo-pin');
+      circle.setAttribute('id', 'geo-pin-' + key);
+      circle.setAttribute('data-country', key);
       const label = `${country} — ${count} fan${count > 1 ? 's' : ''}`;
       const showTooltip = (ev) => {
         if (!tooltip) return;
@@ -1966,12 +2193,27 @@ function renderGeoMap(counts){
       circle.addEventListener('mouseenter', showTooltip);
       circle.addEventListener('mousemove', showTooltip);
       circle.addEventListener('mouseleave', () => { if (tooltip) tooltip.hidden = true; });
+      circle.addEventListener('click', (ev) => { ev.stopPropagation(); geoFocusCountry(key); });
       layer.appendChild(circle);
     });
     if (fallback) {
       fallback.innerHTML = unmatched.length
         ? 'Pays mentionnes mais non localises sur la carte : ' + unmatched.map(([c,n]) => `<span class="geo-country-pill">${escapeHtml(c)} · ${n}</span>`).join('')
         : (entries.length ? '' : "Aucun pays enregistre pour l'instant.");
+    }
+    if (summary) {
+      summary.innerHTML = entries.length
+        ? `<span><strong>${located.length}</strong> pays localisés sur la carte</span><span><strong>${totalFans}</strong> fans avec un pays connu</span>`
+        : '';
+    }
+    if (topList) {
+      topList.innerHTML = located.slice(0, 8).map(([country, count, key]) => `
+        <div class="geo-top-row" id="geo-row-${key}" onclick="geoFocusCountry('${key}')">
+          <span class="name">${escapeHtml(country)}</span>
+          <span class="bar-track"><span class="bar-fill" style="width:${Math.round((count / maxCount) * 100)}%"></span></span>
+          <span class="count">${count}</span>
+        </div>
+      `).join('');
     }
   } catch (err) {
     if (fallback) fallback.textContent = 'Erreur affichage carte: ' + err.message;
