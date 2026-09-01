@@ -423,10 +423,27 @@
   .catalog-add-card:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
   .catalog-add-card .plus{font-size:1.8rem;font-weight:300;line-height:1}
   .card-menu-wrap{position:relative}
-  .card-menu-list{position:absolute;right:0;top:calc(100% + 4px);background:var(--surface-hover);border:1px solid var(--border);
+  /* MISE À JOUR 01/09/2026 — bug remonté par Bryan (capture d'écran) : le menu
+     s'affichait comme "un gros truc dégueulasse" en bas de page. Deux causes
+     cumulées, toutes deux corrigées ici :
+     1) `right:0` datait de l'ancien positionnement `absolute` (dans la carte).
+        Depuis le passage en portail `position:fixed` (voir renderCardMenuPortal),
+        seul `left` est fourni en style inline — `right:0` restait donc actif et,
+        combiné à une largeur `auto`, étirait la boîte jusqu'au bord droit de
+        l'écran (un `position:fixed` avec `left` ET `right` posés se met à
+        largeur automatique = étirée). Supprimé ici ; le portail fixe désormais
+        une largeur explicite en style inline.
+     2) Les boutons de ce menu (Dupliquer / Activer-Désactiver / Supprimer)
+        n'ont jamais eu la classe "btn" — la règle `button.btn svg{width:14px;
+        height:14px}` (ligne ~167) ne s'appliquait donc pas aux icônes
+        ICON_POWER/ICON_TRASH, qui s'affichaient à leur taille SVG par défaut du
+        navigateur (bien plus grande que prévu). On leur donne ici leur propre
+        règle de taille, indépendante de ".btn". */
+  .card-menu-list{position:absolute;top:calc(100% + 4px);background:var(--surface-hover);border:1px solid var(--border);
       border-radius:var(--radius-sm);box-shadow:0 10px 28px rgba(0,0,0,.4);z-index:20;min-width:160px;overflow:hidden}
   .card-menu-list button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;
       color:var(--text);padding:9px 12px;font-size:.8rem;cursor:pointer;font-family:inherit}
+  .card-menu-list button svg{width:14px;height:14px;flex:0 0 14px}
   .card-menu-list button:hover{background:var(--surface-2)}
   .card-menu-list button.danger{color:var(--red)}
 
@@ -2862,7 +2879,7 @@ function renderCardMenuPortal(anchorEl){
   // Aligné sous le bouton, en évitant de dépasser à droite de l'écran.
   const left = Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8);
   root.innerHTML = `
-    <div class="card-menu-list" style="position:fixed;top:${rect.bottom + 4}px;left:${Math.max(8, left)}px;min-width:${menuWidth}px;z-index:600" onclick="event.stopPropagation()">
+    <div class="card-menu-list" style="position:fixed;right:auto;top:${rect.bottom + 4}px;left:${Math.max(8, left)}px;width:${menuWidth}px;min-width:${menuWidth}px;z-index:600" onclick="event.stopPropagation()">
       <button onclick="duplicateItem('${it.id}')">⧉ Dupliquer</button>
       <button onclick="toggleActive('${it.id}', ${!it.active})">${ICON_POWER} ${it.active?'Désactiver':'Activer'}</button>
       <button class="danger" onclick="deleteItem('${it.id}')">${ICON_TRASH} Supprimer</button>
