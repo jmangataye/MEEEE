@@ -195,6 +195,31 @@ async function maybeAlertAdmin(settings, text) {
   }
 }
 
+// MISE À JOUR 01/09/2026 — trouvé en croisant les logs Render avec les vraies
+// conversations : le compte Anthropic a manqué de crédit à 3 reprises depuis
+// le 30/08 (dont une pendant ~35 min ce soir même, 04h36-05h12 UTC), et à
+// chaque fois les fans ne recevaient QUE le message de repli générique ("uy se
+// me trabo un momentico...") sans que Bryan ne soit prévenu autrement qu'en
+// épluchant le dashboard ou les logs après coup. On alerte maintenant sur
+// Telegram (si admin_telegram_chat_id est configuré) dès qu'un vrai échec de
+// traitement se produit — avec un anti-spam par tenant (une alerte au plus
+// toutes les 10 minutes) pour ne pas inonder Bryan d'un message par fan
+// pendant une panne qui touche tout le monde en même temps.
+const lastProcessingErrorAlertAt = new Map(); // tenantId -> timestamp ms
+const PROCESSING_ERROR_ALERT_COOLDOWN_MS = 10 * 60 * 1000;
+async function maybeAlertAdminOfProcessingError(settings, tenantId, err) {
+  const now = Date.now();
+  const last = lastProcessingErrorAlertAt.get(tenantId) || 0;
+  if (now - last < PROCESSING_ERROR_ALERT_COOLDOWN_MS) return;
+  lastProcessingErrorAlertAt.set(tenantId, now);
+  const detail = (err && err.message ? err.message : String(err)).slice(0, 200);
+  const isCredit = /credit balance/i.test(detail);
+  const text = isCredit
+    ? `🔴 Le bot ne peut plus répondre aux fans — crédit Anthropic épuisé (recharge sur console.anthropic.com). Les fans reçoivent le message de repli en attendant.`
+    : `🔴 Le bot a un problème pour répondre à un fan (message de repli envoyé à la place) : ${detail}`;
+  await maybeAlertAdmin(settings, text);
+}
+
 // ---------- Anti-doublon : Telegram peut renvoyer la même mise à jour plusieurs
 // fois (retry) si notre service met trop de temps à répondre — typiquement
 // après une mise en veille du plan gratuit Render ("cold start"). Sans ce
@@ -645,6 +670,19 @@ async function handleIncomingMessage(msg, opts = {}) {
     // une offre traitée par tour, qu'elle soit valide ou bloquée.
     let offerHandledThisTurn = false;
 
+    // MISE À JOUR 01/09/2026 — bug trouvé en relisant de vraies conversations
+    // (ex: fan "Alonso", deux fois "[📸 foto de aperçu enviada: Part 2]" à 4
+    // secondes d'écart) : contrairement à "send_offer" juste au-dessus,
+    // "send_preview" n'avait AUCUN garde-fou — si le modèle appelait l'outil
+    // deux fois pour le même article dans un seul tour, la photo partait
+    // réellement deux fois sur Telegram. Repéré sur au moins 6 fans différents
+    // le soir du 31/08 (grep sur les messages assistant en double envoyés à
+    // quelques secondes d'écart). On garde ici la trace des articles déjà
+    // prévisualisés dans CE tour — un même article ne peut plus être envoyé
+    // deux fois, mais deux articles différents restent possibles si le modèle
+    // veut vraiment montrer deux aperçus distincts.
+    const previewedItemIdsThisTurn = new Set();
+
     for (const call of toolCalls) {
       if (call.name === 'send_offer') {
         if (offerHandledThisTurn) {
@@ -736,6 +774,11 @@ async function handleIncomingMessage(msg, opts = {}) {
           console.warn(`"send_preview" appelé sans aperçu disponible pour l'article demandé (fan ${fan.id}) — ignoré.`);
           continue;
         }
+        if (previewedItemIdsThisTurn.has(item.id)) {
+          console.warn(`"send_preview" ignoré pour fan ${fan.id} — aperçu de "${item.name}" déjà envoyé dans ce même tour.`);
+          continue;
+        }
+        previewedItemIdsThisTurn.add(item.id);
         const previewUrl = await getSignedUrl(item.preview_image_path, 3600);
         if (!previewUrl) continue;
         try {
@@ -825,6 +868,14 @@ async function handleIncomingMessage(msg, opts = {}) {
         } catch (logErr) {
           console.error('Erreur journalisation message de repli:', logErr);
         }
+
+        // MISE À JOUR 01/09/2026 — voir maybeAlertAdminOfProcessingError : Bryan
+        // doit être prévenu en temps réel (pas seulement via le dashboard) quand
+        // le bot ne peut plus répondre — fire-and-forget, ne doit jamais faire
+        // planter ce chemin de repli qui est déjà le dernier filet de sécurité.
+        maybeAlertAdminOfProcessingError(fallbackSettings, tenantId, err).catch((alertErr) =>
+          console.error('Erreur alerte admin (échec de traitement):', alertErr.message)
+        );
       }
     } catch (fallbackErr) {
       console.error('Erreur envoi message de repli après échec de traitement:', fallbackErr);
