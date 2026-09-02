@@ -65,9 +65,13 @@ const {
   listActiveTenants,
   createTenant,
   updateTenant,
+  addWaitlistSignup,
   supabase,
+  getBusinessInsightsCache,
+  saveBusinessInsightsCache,
+  getBusinessInsightsStats,
 } = require('./lib/supabase');
-const { runAgentTurn, buildSystemPrompt, generateScriptSuggestion } = require('./lib/claudeAgent');
+const { runAgentTurn, buildSystemPrompt, generateScriptSuggestion, generatePersonaSuggestion, PERSONA_SUGGESTION_FIELDS, generateBusinessInsights } = require('./lib/claudeAgent');
 const { rememberFanNoteEmbedding } = require('./lib/embeddings');
 const { sendMessage, sendPhoto, sendMessageWithTypingDelay, setWebhook } = require('./lib/telegram');
 const { getLinkForItem } = require('./lib/dropfans');
@@ -119,6 +123,16 @@ app.use(express.json());
 app.use('/landing', express.static(path.join(__dirname, 'public/landing')));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 app.use('/signup', express.static(path.join(__dirname, 'public/signup')));
+app.use('/site', express.static(path.join(__dirname, 'public/site')));
+
+// MISE À JOUR 01/09/2026 — Bryan a tapé le domaine nu (meeli-bot.onrender.com,
+// sans "/admin") et est tombé sur "Cannot GET /" (aucune route ne gérait la
+// racine). Safari iPad/iOS masque le chemin dans la barre d'adresse par
+// défaut (n'affiche que le nom de domaine), donc rien ne distingue
+// visuellement "/admin/" de "/" une fois qu'on retape l'adresse de mémoire —
+// ce genre de confusion va forcément se reproduire. On redirige simplement
+// la racine vers /admin/ pour que l'URL la plus évidente marche toujours.
+app.get('/', (req, res) => res.redirect('/admin/'));
 
 // ---------- Sécurité admin (multi-token, vérifié en base) ----------
 // MISE À JOUR 30/08/2026 (multi-tenant) — isValidAdminToken() renvoie
@@ -951,6 +965,49 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// ---------- Liste d'attente "coming soon" (public/site/) ----------
+// Landing page marketing distincte de /signup : ici on s'adresse à des
+// créateurs/créatrices de contenu pas encore clients, avant l'ouverture
+// complète du produit — voir public/site/index.html. Route volontairement
+// PUBLIQUE (pas de requireAdminToken), comme /api/signup : ce sont des
+// prospects externes qui n'ont, par définition, aucun token à ce stade.
+// waitlist_signups.email porte une contrainte UNIQUE (voir migration
+// create_waitlist_signups_table) — addWaitlistSignup() (lib/supabase.js)
+// détecte le doublon (code Postgres 23505) et renvoie alreadyRegistered:true
+// plutôt que de laisser remonter une erreur 500.
+const WAITLIST_PLATFORMS = ['onlyfans', 'fansly', 'autre', 'aucune'];
+const WAITLIST_FOLLOWER_RANGES = ['0-100', '100-1000', '1000-5000', '5000-20000', '20000+'];
+app.post('/api/waitlist', async (req, res) => {
+  try {
+    const { email, current_platform, follower_range } = req.body || {};
+    const trimmedEmail = (email || '').trim().toLowerCase();
+    // Validation basique volontaire — le vrai contrôle de délivrabilité n'a
+    // aucun intérêt ici (pas d'email de confirmation envoyé pour l'instant),
+    // on veut juste écarter les saisies clairement invalides.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!trimmedEmail || !EMAIL_RE.test(trimmedEmail)) {
+      return res.status(400).json({ error: 'Adresse email invalide.' });
+    }
+    const safePlatform = WAITLIST_PLATFORMS.includes(current_platform) ? current_platform : null;
+    const safeRange = WAITLIST_FOLLOWER_RANGES.includes(follower_range) ? follower_range : null;
+
+    const result = await addWaitlistSignup({
+      email: trimmedEmail,
+      current_platform: safePlatform,
+      follower_range: safeRange,
+      source: 'site_coming_soon',
+    });
+
+    if (result.alreadyRegistered) {
+      return res.json({ ok: true, already_registered: true, message: 'Cet email est déjà inscrit sur la liste d\'attente — on te contactera bientôt !' });
+    }
+    res.json({ ok: true, already_registered: false, message: 'Inscription confirmée — on te contactera dès l\'ouverture !' });
+  } catch (err) {
+    console.error('Erreur inscription liste d\'attente:', err.message);
+    res.status(500).json({ error: 'Une erreur est survenue, réessaie dans quelques instants.' });
+  }
+});
+
 // ---------- Facturation Stripe (squelette — voir lib/stripe.js) ----------
 // IMPORTANT : aucun produit/prix Stripe n'est créé automatiquement ici — c'est
 // une décision business qui revient à Bryan. Tant que STRIPE_SECRET_KEY /
@@ -1074,6 +1131,86 @@ app.post('/api/admin/generate-script-suggestion', requireAdminToken, async (req,
     res.json(suggestion);
   } catch (err) {
     console.error('Erreur génération suggestion de script:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: génération IA d'une suggestion PAR CHAMP pour
+// Identité (Persona & Script) ----------
+// MISE À JOUR 02/09/2026 — bouton "✨ Suggestion IA" à côté de chacun des 3
+// champs de personnalisation du bot (nom, identité/personnalité, ton), pour
+// que Bryan puisse personnaliser le bot "de A à Z" sans page blanche. Séparé
+// de /generate-script-suggestion ci-dessus (qui vise le SCRIPT DE VENTE, 6
+// champs d'un coup) : ici on cible un seul champ à la fois, jamais sauvegardé
+// automatiquement — le dashboard affiche la proposition à côté du champ et
+// n'écrit dedans qu'au clic explicite sur "Utiliser" (voir
+// suggestPersonaField()/applyPersonaSuggestion() côté public/admin/index.html).
+app.post('/api/admin/generate-persona-suggestion', requireAdminToken, async (req, res) => {
+  try {
+    const { field, current } = req.body || {};
+    if (typeof field !== 'string' || !PERSONA_SUGGESTION_FIELDS[field]) {
+      return res.status(400).json({ error: `Champ non pris en charge pour une suggestion IA: ${field}` });
+    }
+    const settings = await getSettings(req.tenantId);
+    // Les valeurs "current" viennent du formulaire NON encore enregistré côté
+    // dashboard (Bryan peut avoir déjà tapé un nom/ton avant de demander une
+    // suggestion pour un autre champ) — elles priment sur la valeur en base
+    // uniquement pour construire le contexte envoyé à l'IA, sans jamais être
+    // écrites en base ici (aucun updateSettings dans cette route).
+    const mergedContext = { ...settings, ...(current && typeof current === 'object' ? current : {}) };
+    const suggestion = await generatePersonaSuggestion({ settings: mergedContext, field });
+    res.json({ field, suggestion });
+  } catch (err) {
+    console.error('Erreur génération suggestion persona:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- API Admin: Insights IA (bilan business, panneau "Insights IA"
+// de la Vue d'ensemble) ----------
+// AJOUT 02/09/2026 — demande : un résumé en langage naturel de la
+// performance business (semaine en cours vs semaine précédente), généré par
+// l'IA, plutôt qu'une simple répétition des chiffres déjà affichés ailleurs
+// sur la page. Mis en cache sur la ligne `settings` du tenant
+// (ai_insights_text / ai_insights_generated_at, voir lib/supabase.js) —
+// AUCUNE génération automatique en arrière-plan/cron : cette route n'appelle
+// l'IA que si `force:true` est envoyé (clic explicite sur "Régénérer" côté
+// dashboard) OU si le cache existant a plus de 24h. Si aucun bilan n'a
+// jamais été généré et que `force` n'est pas passé, elle renvoie `text: null`
+// sans appeler l'IA — le dashboard affiche alors l'état vide ("Clique pour
+// générer ton bilan") plutôt que de générer silencieusement au premier
+// chargement de page.
+const INSIGHTS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+app.post('/api/admin/generate-insights', requireAdminToken, async (req, res) => {
+  try {
+    const force = req.body && req.body.force === true;
+    const cached = await getBusinessInsightsCache(req.tenantId);
+    const hasCache = !!(cached && cached.ai_insights_text);
+    const cacheAgeMs = hasCache ? Date.now() - new Date(cached.ai_insights_generated_at).getTime() : Infinity;
+    const stale = cacheAgeMs >= INSIGHTS_CACHE_MAX_AGE_MS;
+
+    if (!force) {
+      if (!hasCache) {
+        // Jamais généré, et pas de clic explicite : ne PAS appeler l'IA.
+        return res.json({ text: null, generated_at: null, cached: false });
+      }
+      if (!stale) {
+        return res.json({ text: cached.ai_insights_text, generated_at: cached.ai_insights_generated_at, cached: true });
+      }
+      // hasCache && stale && !force → régénération autorisée par la règle
+      // "cache de plus de 24h" (déclenchée par cette requête elle-même,
+      // c'est-à-dire par un admin qui ouvre le dashboard — jamais par un
+      // job planifié).
+    }
+
+    const settings = await getSettings(req.tenantId);
+    const stats = await getBusinessInsightsStats(req.tenantId);
+    const text = await generateBusinessInsights({ settings, stats });
+    const saved = await saveBusinessInsightsCache(req.tenantId, text);
+    res.json({ text: saved.ai_insights_text, generated_at: saved.ai_insights_generated_at, cached: false });
+  } catch (err) {
+    console.error('Erreur génération insights business:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

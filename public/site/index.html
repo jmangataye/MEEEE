@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meeli — Ton IA de vente sur Telegram</title>
+<meta name="description" content="Meeli est une IA qui discute avec tes fans sur Telegram 24/7 et leur propose ton contenu au bon moment. Bientôt disponible — rejoins la liste d'attente." />
+<style>
+  :root{
+    color-scheme:dark;
+    --bg:#120c14;
+    --bg2:#1a1119;
+    --card:#1c1420;
+    --card2:#231825;
+    --border:#3a2a3e;
+    --accent:#e879a6;
+    --accent2:#7c9cff;
+    --text:#f5eef3;
+    --muted:#b9a9bd;
+    --muted2:#7d6e80;
+    --ok:#7fd99a;
+    --err:#f28b8b;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 20% 0%,#2a1a2c,var(--bg) 55%);
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    color:var(--text);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  img{max-width:100%}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* ---------- Nav ---------- */
+  header.nav{
+    position:sticky;top:0;z-index:20;
+    background:rgba(18,12,20,.75);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .navrow{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1080px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:1.15rem;letter-spacing:-.01em}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 12px rgba(232,121,166,.6)}
+  .navcta{
+    padding:9px 18px;border-radius:999px;font-size:.85rem;font-weight:700;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0f14;text-decoration:none;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{padding:76px 0 56px;text-align:center;position:relative;overflow:hidden}
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:7px 16px;border-radius:999px;
+    background:var(--card);border:1px solid var(--border);
+    font-size:.78rem;color:var(--muted);margin-bottom:26px;
+  }
+  .badge .pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 rgba(232,121,166,.6);animation:pulse 2s infinite}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(232,121,166,.55)}
+    70%{box-shadow:0 0 0 8px rgba(232,121,166,0)}
+    100%{box-shadow:0 0 0 0 rgba(232,121,166,0)}
+  }
+  h1{
+    font-size:clamp(2.1rem,5.5vw,3.4rem);
+    line-height:1.12;
+    margin:0 0 20px;
+    letter-spacing:-.02em;
+    font-weight:800;
+  }
+  h1 .grad{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.sub{
+    max-width:620px;margin:0 auto 34px;color:var(--muted);
+    font-size:clamp(1rem,2vw,1.15rem);
+  }
+  .hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:18px}
+  .btn-primary{
+    padding:15px 30px;border-radius:999px;font-weight:700;font-size:.98rem;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0f14;
+    text-decoration:none;border:none;cursor:pointer;
+    box-shadow:0 12px 34px -10px rgba(232,121,166,.55);
+  }
+  .btn-secondary{
+    padding:15px 28px;border-radius:999px;font-weight:600;font-size:.98rem;
+    background:transparent;color:var(--text);border:1px solid var(--border);
+    text-decoration:none;
+  }
+  .hero-fine{font-size:.78rem;color:var(--muted2)}
+
+  /* mock chat visual */
+  .mock{
+    max-width:380px;margin:52px auto 0;background:var(--card);border:1px solid var(--border);
+    border-radius:22px;padding:18px;box-shadow:0 30px 80px -20px rgba(0,0,0,.6);text-align:left;
+  }
+  .mock .mhead{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .mock .mhead .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0}
+  .mock .mhead .mname{font-weight:700;font-size:.88rem}
+  .mock .mhead .mstatus{font-size:.72rem;color:var(--ok)}
+  .bubble{max-width:80%;padding:10px 14px;border-radius:14px;font-size:.85rem;margin-bottom:9px;line-height:1.4}
+  .bubble.in{background:var(--card2);border-bottom-left-radius:4px}
+  .bubble.out{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0f14;margin-left:auto;border-bottom-right-radius:4px;font-weight:600}
+  .bubble.typing{display:inline-flex;gap:4px;padding:12px 16px}
+  .bubble.typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:blink 1.2s infinite}
+  .bubble.typing span:nth-child(2){animation-delay:.2s}
+  .bubble.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+
+  /* ---------- Sections ---------- */
+  section{padding:64px 0}
+  .eyebrow{
+    text-transform:uppercase;letter-spacing:.08em;font-size:.72rem;font-weight:700;
+    color:var(--accent);text-align:center;margin-bottom:10px;
+  }
+  h2{font-size:clamp(1.5rem,3.5vw,2rem);text-align:center;margin:0 0 14px;letter-spacing:-.01em}
+  .lede{text-align:center;color:var(--muted);max-width:560px;margin:0 auto 44px;font-size:.98rem}
+
+  /* problem */
+  .problem-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:8px}
+  .problem-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px}
+  .problem-card .icon{font-size:1.5rem;margin-bottom:10px}
+  .problem-card h3{margin:0 0 8px;font-size:1rem}
+  .problem-card p{margin:0;color:var(--muted);font-size:.88rem}
+
+  /* how it works */
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px;counter-reset:step}
+  .step{position:relative;padding-top:8px}
+  .step .num{
+    width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,rgba(232,121,166,.18),rgba(124,156,255,.18));
+    border:1px solid var(--border);font-weight:800;color:var(--accent);margin-bottom:14px;
+  }
+  .step h3{font-size:1.02rem;margin:0 0 8px}
+  .step p{color:var(--muted);font-size:.88rem;margin:0}
+
+  /* features */
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
+  .feature{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;transition:border-color .2s}
+  .feature:hover{border-color:rgba(232,121,166,.4)}
+  .feature .icon{
+    width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:var(--card2);font-size:1.2rem;margin-bottom:14px;
+  }
+  .feature h3{font-size:1rem;margin:0 0 8px}
+  .feature p{color:var(--muted);font-size:.87rem;margin:0}
+
+  /* trust */
+  .trust{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:36px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
+  .trust-item{display:flex;gap:14px;align-items:flex-start}
+  .trust-item .ticon{font-size:1.3rem;flex-shrink:0}
+  .trust-item h4{margin:0 0 4px;font-size:.92rem}
+  .trust-item p{margin:0;color:var(--muted);font-size:.83rem}
+
+  /* waitlist */
+  .waitlist-section{padding:70px 0 90px}
+  .waitlist-card{
+    max-width:520px;margin:0 auto;background:var(--card);border:1px solid var(--border);
+    border-radius:22px;padding:34px 30px;box-shadow:0 30px 90px -30px rgba(0,0,0,.6);
+  }
+  .waitlist-card h2{margin-bottom:8px}
+  .waitlist-card .lede{margin-bottom:26px}
+  label{display:block;font-size:.8rem;color:var(--muted);margin:16px 0 6px;font-weight:600}
+  label:first-of-type{margin-top:0}
+  input,select{
+    width:100%;padding:13px 14px;border-radius:11px;border:1px solid var(--border);
+    background:var(--bg2);color:var(--text);font-size:.92rem;font-family:inherit;
+  }
+  input::placeholder{color:var(--muted2)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23b9a9bd' stroke-width='1.6' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 14px center}
+  .submit-btn{
+    width:100%;margin-top:24px;padding:15px;border:none;border-radius:11px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a0f14;
+    font-size:.98rem;font-weight:800;cursor:pointer;
+  }
+  .submit-btn:disabled{opacity:.55;cursor:not-allowed}
+  .msg{margin-top:16px;padding:12px 14px;border-radius:10px;font-size:.85rem;line-height:1.5;display:none}
+  .msg.err{background:rgba(242,139,139,.12);color:var(--err);display:block}
+  .msg.ok{background:rgba(127,217,154,.14);color:var(--ok);display:block}
+  .privacy-note{margin-top:16px;font-size:.74rem;color:var(--muted2);line-height:1.5;text-align:center}
+  .success-state{display:none;text-align:center;padding:12px 0}
+  .success-state .check{font-size:2.4rem;margin-bottom:10px}
+  .success-state h3{margin:0 0 8px;font-size:1.1rem}
+  .success-state p{color:var(--muted);font-size:.88rem;margin:0}
+
+  /* faq */
+  .faq{max-width:720px;margin:0 auto}
+  .faq-item{border-bottom:1px solid var(--border);padding:18px 0}
+  .faq-item summary{cursor:pointer;font-weight:700;font-size:.95rem;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .faq-item summary::-webkit-details-marker{display:none}
+  .faq-item summary::after{content:'+';font-size:1.3rem;color:var(--accent);font-weight:400;flex-shrink:0}
+  .faq-item[open] summary::after{content:'−'}
+  .faq-item p{color:var(--muted);font-size:.88rem;margin:12px 0 0;line-height:1.6}
+
+  footer{border-top:1px solid rgba(255,255,255,.06);padding:32px 0;text-align:center}
+  footer p{color:var(--muted2);font-size:.78rem;margin:4px 0}
+  footer .fbrand{font-weight:800;color:var(--muted);margin-bottom:6px}
+
+  @media (max-width:640px){
+    section{padding:48px 0}
+    .trust{padding:26px}
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="navrow">
+    <div class="brand"><span class="dot"></span> Meeli</div>
+    <a class="navcta" href="#waitlist">Rejoindre la liste d'attente</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <span class="badge"><span class="pulse"></span> En cours de lancement — accès anticipé bientôt ouvert</span>
+      <h1>Ton assistante de vente <span class="grad">ne dort jamais.</span></h1>
+      <p class="sub">Meeli est une IA qui discute avec tes fans sur Telegram, apprend à les connaître, et leur propose ton contenu payant au bon moment — pendant que tu vis ta vie.</p>
+      <div class="hero-ctas">
+        <a href="#waitlist" class="btn-primary">Je veux un accès anticipé</a>
+        <a href="#how" class="btn-secondary">Comment ça marche →</a>
+      </div>
+      <p class="hero-fine">Gratuit à l'inscription sur liste d'attente · aucune carte bancaire demandée</p>
+
+      <div class="mock" aria-hidden="true">
+        <div class="mhead">
+          <div class="av"></div>
+          <div>
+            <div class="mname">Mia — assistante de Camila</div>
+            <div class="mstatus">● en ligne</div>
+          </div>
+        </div>
+        <div class="bubble in">hello, je viens de découvrir ton profil 😳</div>
+        <div class="bubble out">Hey ! Contente que tu sois là 🥰 dis-moi, qu'est-ce qui t'a plu ?</div>
+        <div class="bubble in">tes photos de vacances, t'étais où ?</div>
+        <div class="bubble out">Ahah secret 😏 j'ai justement une série exclusive de ce jour-là que je n'ai jamais partagée ailleurs...</div>
+        <div class="bubble typing"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="problem">
+    <div class="wrap">
+      <div class="eyebrow">Le problème</div>
+      <h2>Vendre du contenu, c'est un travail à temps plein</h2>
+      <p class="lede">Répondre à chaque message, relancer les fans qui décrochent, proposer la bonne offre au bon moment — impossible à tenir seul(e), tous les jours, sans épuisement.</p>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="icon">😴</div>
+          <h3>Tu ne peux pas être en ligne 24/7</h3>
+          <p>Un fan qui écrit à 3h du matin et n'a pas de réponse repart souvent voir ailleurs.</p>
+        </div>
+        <div class="problem-card">
+          <div class="icon">💸</div>
+          <h3>Des ventes qui passent à la trappe</h3>
+          <p>Sans relance au bon moment, la majorité des fans intéressés n'achètent jamais.</p>
+        </div>
+        <div class="problem-card">
+          <div class="icon">🥱</div>
+          <h3>Les mêmes conversations, en boucle</h3>
+          <p>Répondre aux mêmes questions à des dizaines de fans chaque jour, ça épuise plus que ça ne rapporte.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="eyebrow">Comment ça marche</div>
+      <h2>Trois étapes, et Meeli prend le relais</h2>
+      <p class="lede">Pas besoin de compétence technique — tout se configure depuis un tableau de bord simple.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="num">1</div>
+          <h3>Tu connectes ton bot Telegram</h3>
+          <p>Quelques minutes suffisent, aucun code à écrire. Ton bot devient le point de contact avec tes fans.</p>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <h3>Tu définis ta personnalité et ton offre</h3>
+          <p>Ton, ambiance, tarifs, contenus disponibles — Meeli s'exprime avec ton style, pas un ton robotique générique.</p>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <h3>Meeli discute, qualifie et vend</h3>
+          <p>Elle répond à chaque fan, cerne ce qui l'intéresse, et propose l'offre adaptée au moment opportun.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="eyebrow">Ce que tu obtiens</div>
+      <h2>Une équipe de vente, sans l'embaucher</h2>
+      <div class="features">
+        <div class="feature">
+          <div class="icon">🤖</div>
+          <h3>Disponible 24/7</h3>
+          <p>Chaque fan reçoit une réponse immédiate, à toute heure, sans que tu aies à toucher ton téléphone.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">🧠</div>
+          <h3>Mémoire de chaque fan</h3>
+          <p>Meeli se souvient des goûts et des échanges précédents pour personnaliser chaque conversation.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">🎯</div>
+          <h3>Le bon moment, la bonne offre</h3>
+          <p>Elle propose du contenu payant quand l'intérêt du fan est réel — pas de spam agressif qui fait fuir.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">📊</div>
+          <h3>Tableau de bord clair</h3>
+          <p>Ventes, conversations en cours, performance — tout visible en un coup d'œil, à toute heure.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">🛡️</div>
+          <h3>Garde-fous intégrés</h3>
+          <p>Filtres de sécurité sur les échanges sensibles et alertes en cas de comportement à risque.</p>
+        </div>
+        <div class="feature">
+          <div class="icon">⚙️</div>
+          <h3>Toujours sous ton contrôle</h3>
+          <p>Tu peux reprendre la main sur n'importe quelle conversation à tout moment, en un clic.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="trust">
+    <div class="wrap">
+      <div class="eyebrow">Sérieux &amp; confidentialité</div>
+      <h2>Construit pour être utilisé en toute confiance</h2>
+      <div class="trust">
+        <div class="trust-item">
+          <div class="ticon">🔒</div>
+          <div>
+            <h4>Tes données restent les tiennes</h4>
+            <p>Aucune revente d'informations. Tes contenus et ceux de tes fans ne servent qu'à faire fonctionner ton propre bot.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="ticon">🕶️</div>
+          <div>
+            <h4>Discrétion totale</h4>
+            <p>Ni ton nom ni ton activité n'apparaissent nulle part publiquement — Meeli reste un outil en coulisses.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="ticon">🚧</div>
+          <div>
+            <h4>Produit en cours de lancement</h4>
+            <p>On ouvre l'accès progressivement, par vagues, pour accompagner correctement chaque créateur qui rejoint.</p>
+          </div>
+        </div>
+        <div class="trust-item">
+          <div class="ticon">✋</div>
+          <div>
+            <h4>Sans engagement à l'inscription</h4>
+            <p>Rejoindre la liste d'attente ne t'engage à rien — tu décides si et quand tu passes à l'essai.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="waitlist" class="waitlist-section">
+    <div class="wrap">
+      <div class="waitlist-card">
+        <div id="formState">
+          <h2 style="text-align:left">Rejoins la liste d'attente</h2>
+          <p class="lede" style="text-align:left;margin:0 0 8px">Sois prévenu(e) dès l'ouverture des accès anticipés — sans spam, promis.</p>
+
+          <form id="waitlistForm" novalidate>
+            <label for="email">Adresse email *</label>
+            <input id="email" name="email" type="email" required placeholder="toi@example.com" autocomplete="email">
+
+            <label for="current_platform">Plateforme actuelle (optionnel)</label>
+            <select id="current_platform" name="current_platform">
+              <option value="">— Sélectionner —</option>
+              <option value="onlyfans">OnlyFans</option>
+              <option value="fansly">Fansly</option>
+              <option value="autre">Autre plateforme</option>
+              <option value="aucune">Aucune pour l'instant</option>
+            </select>
+
+            <label for="follower_range">Nombre de fans / abonnés actuel (optionnel)</label>
+            <select id="follower_range" name="follower_range">
+              <option value="">— Sélectionner —</option>
+              <option value="0-100">Moins de 100</option>
+              <option value="100-1000">100 – 1 000</option>
+              <option value="1000-5000">1 000 – 5 000</option>
+              <option value="5000-20000">5 000 – 20 000</option>
+              <option value="20000+">Plus de 20 000</option>
+            </select>
+
+            <button type="submit" class="submit-btn" id="submitBtn">Rejoindre la liste d'attente</button>
+          </form>
+          <div class="msg" id="msgBox"></div>
+          <p class="privacy-note">En t'inscrivant, tu acceptes d'être recontacté(e) par email au sujet du lancement de Meeli. Aucune autre utilisation de ton email.</p>
+        </div>
+
+        <div class="success-state" id="successState">
+          <div class="check">✅</div>
+          <h3 id="successTitle">C'est noté !</h3>
+          <p id="successText">On te prévient dès que ton accès anticipé est prêt.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="eyebrow">Questions fréquentes</div>
+      <h2>Encore quelques doutes ?</h2>
+      <div class="faq">
+        <details class="faq-item">
+          <summary>Est-ce que je dois savoir coder ?</summary>
+          <p>Non. Tout se configure depuis un tableau de bord — tu connectes ton bot Telegram, tu remplis ton persona et ton catalogue, c'est tout.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Meeli remplace-t-elle complètement mon travail ?</summary>
+          <p>Elle prend en charge la conversation et la vente au quotidien, mais tu gardes toujours le contrôle : tu peux reprendre une conversation à tout moment.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Quand est-ce que je pourrai l'utiliser ?</summary>
+          <p>Le produit est en cours de lancement, avec des accès ouverts progressivement par vagues. Inscris-toi sur la liste d'attente pour être prévenu(e) en priorité.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Est-ce que ça fonctionne avec OnlyFans ou Fansly ?</summary>
+          <p>Meeli fonctionne via Telegram, en complément de la plateforme sur laquelle tu vends déjà ton contenu (OnlyFans, Fansly, ou autre).</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="fbrand">Meeli</div>
+    <p>Ton assistante de vente IA sur Telegram.</p>
+    <p>© 2026 Meeli — tous droits réservés.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var form = document.getElementById('waitlistForm');
+  var msgBox = document.getElementById('msgBox');
+  var submitBtn = document.getElementById('submitBtn');
+  var formState = document.getElementById('formState');
+  var successState = document.getElementById('successState');
+  var successTitle = document.getElementById('successTitle');
+  var successText = document.getElementById('successText');
+
+  function showMsg(text, kind){
+    msgBox.textContent = text;
+    msgBox.className = 'msg ' + kind;
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    msgBox.className = 'msg';
+    msgBox.textContent = '';
+
+    var email = document.getElementById('email').value.trim();
+    var current_platform = document.getElementById('current_platform').value;
+    var follower_range = document.getElementById('follower_range').value;
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showMsg('Merci d\'indiquer une adresse email valide.', 'err');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Inscription en cours...';
+
+    fetch('/api/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, current_platform: current_platform, follower_range: follower_range }),
+    })
+      .then(function(r){ return r.json().then(function(data){ return { ok: r.ok, data: data }; }); })
+      .then(function(res){
+        if (!res.ok) {
+          throw new Error((res.data && res.data.error) || 'Une erreur est survenue.');
+        }
+        if (res.data.already_registered) {
+          successTitle.textContent = 'Déjà inscrit(e) !';
+          successText.textContent = res.data.message || 'Cet email est déjà sur la liste d\'attente.';
+        } else {
+          successTitle.textContent = 'C\'est noté !';
+          successText.textContent = res.data.message || 'On te prévient dès que ton accès anticipé est prêt.';
+        }
+        formState.style.display = 'none';
+        successState.style.display = 'block';
+      })
+      .catch(function(err){
+        showMsg(err.message || 'Une erreur est survenue, réessaie dans quelques instants.', 'err');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Rejoindre la liste d\'attente';
+      });
+  });
+})();
+</script>
+</body>
+</html>
